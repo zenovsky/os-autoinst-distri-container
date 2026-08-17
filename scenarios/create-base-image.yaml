@@ -1,0 +1,17 @@
+name: Create base image
+
+type: image
+
+source:
+  scenario: installation-gui
+
+tests:
+  - tests/system/poweroff.pm
+
+image:
+  size_gb: 20
+  name: "%DISTRI%-%VERSION%-%ARCH%.qcow2"
+
+variables:
+  QEMUCPU: host
+  QEMUCPUS: 2

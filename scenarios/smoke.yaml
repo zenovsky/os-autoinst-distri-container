@@ -1,0 +1,15 @@
+name: Smoke
+
+type: test
+
+variables:
+  OS_NAME: AlmaLinux
+  QEMUCPU: host
+  QEMUCPUS: 2
+
+tests:
+  - tests/system/first_boot.pm
+  - tests/system/os_release.pm
+  - tests/system/kernel.pm
+  - tests/system/systemd.pm
+  - tests/system/poweroff.pm

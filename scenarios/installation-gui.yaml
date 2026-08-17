@@ -1,0 +1,7 @@
+name: GUI installation
+
+type: test
+
+tests:
+  - tests/installation/gui_install.pm
+  - tests/system/first_boot.pm

@@ -1,0 +1,436 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use FindBin '$Bin';
+use Getopt::Long qw(GetOptions);
+use JSON::PP qw(decode_json);
+
+use lib "$Bin/../lib";
+
+use ScenarioLoader;
+
+# ------------------------------------------------------------
+# Defaults
+# ------------------------------------------------------------
+
+my %opt = (
+    host => 'http://localhost:1080',
+    poll => 10,
+);
+
+# ------------------------------------------------------------
+# CLI
+# ------------------------------------------------------------
+
+my $scenario_name = shift @ARGV
+    // die "Usage: $0 <scenario> [options]\n";
+
+GetOptions(
+    'host=s'     => \$opt{host},
+    'distri=s'   => \$opt{distri},
+    'version=s'  => \$opt{version},
+    'flavor=s'   => \$opt{flavor},
+    'arch=s'     => \$opt{arch},
+    'machine=s'  => \$opt{machine},
+    'iso=s'      => \$opt{iso},
+    'casedir=s'  => \$opt{casedir},
+    'hdd=s'      => \$opt{hdd},
+    'poll=i'     => \$opt{poll},
+    'help'       => \$opt{help},
+) or die "Invalid options\n";
+
+if ($opt{help}) {
+    print_usage();
+    exit 0;
+}
+
+die "--poll must be greater than 0\n"
+    if $opt{poll} <= 0;
+
+# ------------------------------------------------------------
+# Load scenario
+# ------------------------------------------------------------
+
+my $loader = ScenarioLoader->new(
+    scenario_dir => "$Bin/../scenarios"
+);
+
+my $scenario = $loader->load($scenario_name);
+
+print "Scenario: $scenario->{name}\n";
+print "Type:     $scenario->{type}\n";
+
+# ------------------------------------------------------------
+# Validate common parameters
+# ------------------------------------------------------------
+
+require_option('distri');
+require_option('version');
+require_option('flavor');
+require_option('arch');
+require_option('machine');
+require_option('iso');
+require_option('casedir');
+
+# ------------------------------------------------------------
+# Prepare job parameters
+# ------------------------------------------------------------
+
+my %job = (
+    DISTRI  => $opt{distri},
+    VERSION => $opt{version},
+    FLAVOR  => $opt{flavor},
+    ARCH    => $opt{arch},
+    MACHINE => $opt{machine},
+    BACKEND => 'qemu',
+    ISO     => $opt{iso},
+    CASEDIR => $opt{casedir},
+
+    QEMUCPU  => 'host',
+    QEMUCPUS => 2,
+
+    TEST     => $scenario_name,
+    SCENARIO => $scenario_name,
+);
+
+# ------------------------------------------------------------
+# Add scenario variables
+# ------------------------------------------------------------
+
+for my $key (keys %{$scenario->{variables} // {}}) {
+    $job{$key} = $scenario->{variables}{$key};
+}
+
+# ------------------------------------------------------------
+# Expand variables
+#
+# Example:
+#
+#   %DISTRI%-%VERSION%-%ARCH%.qcow2
+#
+# becomes:
+#
+#   os-autoinst-distri-container-10.2-x86_64.qcow2
+#
+# Values are resolved from %job.
+# ------------------------------------------------------------
+
+sub expand_variables {
+    my ($value, $job) = @_;
+
+    return $value unless defined $value;
+
+    $value =~ s/%([A-Z0-9_]+)%/
+        exists $job->{$1}
+            ? $job->{$1}
+            : "%$1%"
+    /ge;
+
+    return $value;
+}
+
+for my $key (keys %job) {
+    $job{$key} = expand_variables(
+        $job{$key},
+        \%job
+    );
+}
+
+# ------------------------------------------------------------
+# Image scenario
+# ------------------------------------------------------------
+
+my $expected_image;
+
+if ($scenario->{type} eq 'image') {
+
+    my $image = $scenario->{image};
+
+    my $image_size = $image->{size_gb};
+
+    $expected_image = expand_variables(
+        $image->{name},
+        \%job
+    );
+
+    print "Image:\n";
+    print "  Name: $expected_image\n";
+    print "  Size: ${image_size} GB\n";
+
+    $job{HDDSIZEGB} = $image_size;
+    $job{PUBLISH_HDD_1} = $expected_image;
+}
+
+# ------------------------------------------------------------
+# Test scenario using an existing HDD
+# ------------------------------------------------------------
+
+elsif ($scenario->{type} eq 'test') {
+
+    if (defined $opt{hdd} && length $opt{hdd}) {
+
+        $job{BOOT_HDD_IMAGE} = 1;
+        $job{HDD_1} = $opt{hdd};
+
+        print "HDD:\n";
+        print "  Image: $opt{hdd}\n";
+    }
+}
+
+# ------------------------------------------------------------
+# Expand variables again
+#
+# This is important because image-specific parameters such as
+# PUBLISH_HDD_1 are added after the first expansion.
+# ------------------------------------------------------------
+
+for my $key (keys %job) {
+    $job{$key} = expand_variables(
+        $job{$key},
+        \%job
+    );
+}
+
+# ------------------------------------------------------------
+# Print job parameters
+# ------------------------------------------------------------
+
+print "\nJob parameters:\n";
+
+for my $key (sort keys %job) {
+    print "  $key=$job{$key}\n";
+}
+
+# ------------------------------------------------------------
+# Submit job
+# ------------------------------------------------------------
+
+print "\nStarting openQA job...\n";
+
+my @command = (
+    'openqa-cli',
+    'api',
+    '-X',
+    'POST',
+    'jobs',
+);
+
+for my $key (sort keys %job) {
+    push @command, "$key=$job{$key}";
+}
+
+my $response = capture_command(@command);
+
+my $data = decode_json($response);
+
+die "openQA response does not contain job id\n"
+    unless exists $data->{id};
+
+my $job_id = $data->{id};
+
+print "Job ID: $job_id\n";
+
+# ------------------------------------------------------------
+# Wait for job
+# ------------------------------------------------------------
+
+wait_for_job($job_id);
+
+# ------------------------------------------------------------
+# Get final job information
+# ------------------------------------------------------------
+
+my $job_data = get_job($job_id);
+
+my $job_result = $job_data->{job}->{result};
+my $job_state  = $job_data->{job}->{state};
+
+print "\nJob finished.\n";
+print "  ID:     $job_id\n";
+print "  State:  $job_state\n";
+print "  Result: " . ($job_result // 'none') . "\n";
+
+# ------------------------------------------------------------
+# Check result
+# ------------------------------------------------------------
+
+if (!defined $job_result || $job_result ne 'passed') {
+
+    print "\nScenario '$scenario_name' failed.\n";
+
+    exit 1;
+}
+
+# ------------------------------------------------------------
+# Check published image
+# ------------------------------------------------------------
+
+if ($scenario->{type} eq 'image') {
+
+    my $hdds = $job_data->{job}->{assets}->{hdd} // [];
+
+    my %published = map {
+        $_ => 1
+    } @{$hdds};
+
+    unless ($published{$expected_image}) {
+
+        print "\nERROR: Expected HDD was not published:\n";
+        print "  $expected_image\n";
+
+        print "\nPublished HDD assets:\n";
+
+        for my $hdd (@{$hdds}) {
+            print "  $hdd\n";
+        }
+
+        exit 1;
+    }
+
+    print "\nImage successfully created:\n";
+    print "  $expected_image\n";
+}
+
+# ------------------------------------------------------------
+# Success
+# ------------------------------------------------------------
+
+print "\nScenario '$scenario_name' passed.\n";
+
+exit 0;
+
+# ============================================================
+# Functions
+# ============================================================
+
+sub wait_for_job {
+    my ($job_id) = @_;
+
+    print "\nWaiting for job $job_id...\n";
+
+    while (1) {
+
+        my $job_data = get_job($job_id);
+
+        my $state = $job_data->{job}->{state} // 'unknown';
+        my $result = $job_data->{job}->{result};
+
+        if (defined $result && length $result) {
+            print "  Job $job_id: state=$state result=$result\n";
+        }
+        else {
+            print "  Job $job_id: state=$state result=none\n";
+        }
+
+        last if $state eq 'done';
+
+        sleep $opt{poll};
+    }
+}
+
+sub get_job {
+    my ($job_id) = @_;
+
+    my @command = (
+        'openqa-cli',
+        'api',
+        "jobs/$job_id",
+    );
+
+    my $response = capture_command(@command);
+
+    return decode_json($response);
+}
+
+sub capture_command {
+    my (@command) = @_;
+
+    open my $fh, '-|', @command
+        or die "Failed to execute @command: $!\n";
+
+    local $/;
+
+    my $output = <$fh>;
+
+    close $fh;
+
+    if ($? == -1) {
+        die "Failed to execute @command: $!\n";
+    }
+
+    if ($? & 127) {
+        die sprintf(
+            "Command terminated by signal %d\n",
+            $? & 127
+        );
+    }
+
+    my $exit_code = $? >> 8;
+
+    if ($exit_code != 0) {
+        die "Command exited with code $exit_code\n";
+    }
+
+    return $output;
+}
+
+sub require_option {
+    my ($name) = @_;
+
+    return if defined $opt{$name} && length $opt{$name};
+
+    die "Missing required option: --$name\n";
+}
+
+sub print_usage {
+    print <<"USAGE";
+Usage:
+
+  $0 <scenario> [options]
+
+Required options:
+
+  --distri NAME
+  --version VERSION
+  --flavor FLAVOR
+  --arch ARCH
+  --machine MACHINE
+  --iso ISO
+  --casedir PATH
+
+Optional:
+
+  --host URL
+  --hdd IMAGE
+  --poll SECONDS
+  --help
+
+Examples:
+
+Create base image:
+
+  $0 create-base-image \\
+      --distri os-autoinst-distri-container \\
+      --version 10.2 \\
+      --flavor Minimal \\
+      --arch x86_64 \\
+      --machine 64bit \\
+      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
+      --casedir /var/lib/openqa/tests/os-autoinst-distri-container
+
+Run smoke using existing HDD:
+
+  $0 smoke \\
+      --distri os-autoinst-distri-container \\
+      --version 10.2 \\
+      --flavor Minimal \\
+      --arch x86_64 \\
+      --machine 64bit \\
+      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
+      --casedir /var/lib/openqa/tests/os-autoinst-distri-container \\
+      --hdd os-autoinst-distri-container-10.2-x86_64.qcow2
+
+USAGE
+}
