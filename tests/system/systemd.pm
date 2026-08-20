@@ -22,6 +22,11 @@ sub run {
         'systemctl --version',
         timeout => 10
     );
+
+    record_info(
+        'Systemd',
+        'systemd is available'
+    );
 }
 
 1;

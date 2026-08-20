@@ -1,11 +1,26 @@
-# Copyright 2014-2018 SUSE LLC
-# SPDX-License-Identifier: GPL-2.0-or-later
-
-
 use Mojo::Base -strict;
 use testapi;
 use autotest;
 
-autotest::loadtest 'tests/boot.pm';
+my $casedir = get_var('CASEDIR');
+
+die "CASEDIR is not set\n"
+    unless $casedir;
+
+unshift @INC, "$casedir/lib";
+
+require ScenarioLoader;
+
+my $scenario_name = get_var('SCENARIO', 'smoke');
+
+my $loader = ScenarioLoader->new(
+    scenario_dir => "$casedir/scenarios"
+);
+
+my $scenario = $loader->load($scenario_name);
+
+for my $test (@{$scenario->{tests} // []}) {
+    autotest::loadtest $test;
+}
 
 1;

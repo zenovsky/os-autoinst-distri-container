@@ -12,4 +12,8 @@ sub run {
     assert_screen 'console-root-access', 720;
 }
 
+sub test_flags {
+    return { fatal => 1 };
+}
+
 1;

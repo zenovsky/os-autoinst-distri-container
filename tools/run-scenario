@@ -31,10 +31,12 @@ GetOptions(
     'host=s'     => \$opt{host},
     'distri=s'   => \$opt{distri},
     'version=s'  => \$opt{version},
+    'build=s'    => \$opt{build},
     'flavor=s'   => \$opt{flavor},
     'arch=s'     => \$opt{arch},
     'machine=s'  => \$opt{machine},
     'iso=s'      => \$opt{iso},
+    'iso-url=s'  => \$opt{iso_url},
     'casedir=s'  => \$opt{casedir},
     'hdd=s'      => \$opt{hdd},
     'poll=i'     => \$opt{poll},
@@ -50,19 +52,6 @@ die "--poll must be greater than 0\n"
     if $opt{poll} <= 0;
 
 # ------------------------------------------------------------
-# Load scenario
-# ------------------------------------------------------------
-
-my $loader = ScenarioLoader->new(
-    scenario_dir => "$Bin/../scenarios"
-);
-
-my $scenario = $loader->load($scenario_name);
-
-print "Scenario: $scenario->{name}\n";
-print "Type:     $scenario->{type}\n";
-
-# ------------------------------------------------------------
 # Validate common parameters
 # ------------------------------------------------------------
 
@@ -73,49 +62,366 @@ require_option('arch');
 require_option('machine');
 require_option('iso');
 require_option('casedir');
+require_option('build');
 
 # ------------------------------------------------------------
-# Prepare job parameters
+# Verify
+#
+# verify is an orchestration scenario:
+#
+#   create-base-image
+#          |
+#          +-- passed --> smoke
+#                         |
+#                         +-- passed --> regression
+#
+# If any stage fails, the next stage is not started.
 # ------------------------------------------------------------
 
-my %job = (
-    DISTRI  => $opt{distri},
-    VERSION => $opt{version},
-    FLAVOR  => $opt{flavor},
-    ARCH    => $opt{arch},
-    MACHINE => $opt{machine},
-    BACKEND => 'qemu',
-    ISO     => $opt{iso},
-    CASEDIR => $opt{casedir},
+if ($scenario_name eq 'verify') {
 
-    QEMUCPU  => 'host',
-    QEMUCPUS => 2,
+    print "\n";
+    print "============================================================\n";
+    print "VERIFY\n";
+    print "============================================================\n";
 
-    TEST     => $scenario_name,
-    SCENARIO => $scenario_name,
-);
+    # --------------------------------------------------------
+    # Stage 1: create-base-image
+    # --------------------------------------------------------
 
-# ------------------------------------------------------------
-# Add scenario variables
-# ------------------------------------------------------------
+    print "\n";
+    print "------------------------------------------------------------\n";
+    print "Stage 1/3: create-base-image\n";
+    print "------------------------------------------------------------\n";
 
-for my $key (keys %{$scenario->{variables} // {}}) {
-    $job{$key} = $scenario->{variables}{$key};
+    my $image = run_scenario('create-base-image');
+
+    unless ($image) {
+        print "\n";
+        print "ERROR: create-base-image did not produce an HDD image.\n";
+        print "Smoke and regression will NOT be started.\n";
+        exit 1;
+    }
+
+    print "\n";
+    print "Base image is ready:\n";
+    print "  $image\n";
+
+    # --------------------------------------------------------
+    # Stage 2: smoke
+    # --------------------------------------------------------
+
+    print "\n";
+    print "------------------------------------------------------------\n";
+    print "Stage 2/3: smoke\n";
+    print "------------------------------------------------------------\n";
+
+    my $smoke_result = run_scenario(
+        'smoke',
+        hdd => $image,
+    );
+
+    unless ($smoke_result) {
+        print "\n";
+        print "ERROR: smoke failed.\n";
+        print "Regression will NOT be started.\n";
+        exit 1;
+    }
+
+    # --------------------------------------------------------
+    # Stage 3: regression
+    # --------------------------------------------------------
+
+    print "\n";
+    print "------------------------------------------------------------\n";
+    print "Stage 3/3: regression\n";
+    print "------------------------------------------------------------\n";
+
+    my $regression_result = run_scenario(
+        'regression',
+        hdd => $image,
+    );
+
+    unless ($regression_result) {
+        print "\n";
+        print "ERROR: regression failed.\n";
+        exit 1;
+    }
+
+    # --------------------------------------------------------
+    # Verify success
+    # --------------------------------------------------------
+
+    print "\n";
+    print "============================================================\n";
+    print "VERIFY PASSED\n";
+    print "============================================================\n";
+
+    print "\n";
+    print "All stages passed:\n";
+    print "  create-base-image: passed\n";
+    print "  smoke:             passed\n";
+    print "  regression:        passed\n";
+
+    exit 0;
 }
 
 # ------------------------------------------------------------
-# Expand variables
+# Normal scenario
 #
-# Example:
+# Existing behavior for:
 #
-#   %DISTRI%-%VERSION%-%ARCH%.qcow2
+#   create-base-image
+#   smoke
+#   regression
 #
-# becomes:
-#
-#   os-autoinst-distri-container-10.2-x86_64.qcow2
-#
-# Values are resolved from %job.
+# remains unchanged.
 # ------------------------------------------------------------
+
+run_scenario($scenario_name);
+
+exit 0;
+
+# ============================================================
+# Run scenario
+# ============================================================
+
+sub run_scenario {
+    my ($name, %args) = @_;
+
+    my $hdd = $args{hdd};
+
+    # --------------------------------------------------------
+    # Load scenario
+    # --------------------------------------------------------
+
+    my $loader = ScenarioLoader->new(
+        scenario_dir => "$Bin/../scenarios"
+    );
+
+    my $scenario = $loader->load($name);
+
+    print "Scenario: $scenario->{name}\n";
+    print "Type:     $scenario->{type}\n";
+
+    # --------------------------------------------------------
+    # Prepare job parameters
+    # --------------------------------------------------------
+
+    my %job = (
+        DISTRI  => $opt{distri},
+        VERSION => $opt{version},
+        BUILD   => $opt{build},
+        FLAVOR  => $opt{flavor},
+        ARCH    => $opt{arch},
+        MACHINE => $opt{machine},
+        BACKEND => 'qemu',
+        ISO     => $opt{iso},
+        CASEDIR => $opt{casedir},
+
+        TEST     => $name,
+        SCENARIO => $name,
+    );
+
+    $job{ISO_URL} = $opt{iso_url}
+        if defined $opt{iso_url} && length $opt{iso_url};
+
+    # --------------------------------------------------------
+    # Add scenario variables
+    # --------------------------------------------------------
+
+    for my $key (keys %{$scenario->{variables} // {}}) {
+        $job{$key} = $scenario->{variables}{$key};
+    }
+
+    # --------------------------------------------------------
+    # Expand variables
+    #
+    # Example:
+    #
+    #   %DISTRI%-%VERSION%-%ARCH%.qcow2
+    #
+    # becomes:
+    #
+    #   os-autoinst-distri-container-10.2-x86_64.qcow2
+    # --------------------------------------------------------
+
+    for my $key (keys %job) {
+        $job{$key} = expand_variables(
+            $job{$key},
+            \%job
+        );
+    }
+
+    # --------------------------------------------------------
+    # Image scenario
+    # --------------------------------------------------------
+
+    my $expected_image;
+
+    if ($scenario->{type} eq 'image') {
+
+        my $image = $scenario->{image};
+
+        my $image_size = $image->{size_gb};
+
+        $expected_image = expand_variables(
+            $image->{name},
+            \%job
+        );
+
+        print "Image:\n";
+        print "  Name: $expected_image\n";
+        print "  Size: ${image_size} GB\n";
+
+        $job{HDDSIZEGB} = $image_size;
+        $job{PUBLISH_HDD_1} = $expected_image;
+    }
+
+    # --------------------------------------------------------
+    # Test scenario using an existing HDD
+    # --------------------------------------------------------
+
+    elsif ($scenario->{type} eq 'test') {
+
+        if (defined $hdd && length $hdd) {
+
+            $job{BOOT_HDD_IMAGE} = 1;
+            $job{HDD_1} = $hdd;
+
+            print "HDD:\n";
+            print "  Image: $hdd\n";
+        }
+    }
+
+    # --------------------------------------------------------
+    # Expand variables again
+    #
+    # This is important because image-specific parameters such
+    # as PUBLISH_HDD_1 are added after the first expansion.
+    # --------------------------------------------------------
+
+    for my $key (keys %job) {
+        $job{$key} = expand_variables(
+            $job{$key},
+            \%job
+        );
+    }
+
+    # --------------------------------------------------------
+    # Print job parameters
+    # --------------------------------------------------------
+
+    print "\nJob parameters:\n";
+
+    for my $key (sort keys %job) {
+        print "  $key=$job{$key}\n";
+    }
+
+    # --------------------------------------------------------
+    # Submit job
+    # --------------------------------------------------------
+
+    print "\nStarting openQA job...\n";
+
+    my @command = (
+        'openqa-cli',
+        'api',
+        '-X',
+        'POST',
+        'jobs',
+    );
+
+    for my $key (sort keys %job) {
+        push @command, "$key=$job{$key}";
+    }
+
+    my $response = capture_command(@command);
+
+    my $data = decode_json($response);
+
+    die "openQA response does not contain job id\n"
+        unless exists $data->{id};
+
+    my $job_id = $data->{id};
+
+    print "Job ID: $job_id\n";
+
+    # --------------------------------------------------------
+    # Wait for job
+    # --------------------------------------------------------
+
+    wait_for_job($job_id);
+
+    # --------------------------------------------------------
+    # Get final job information
+    # --------------------------------------------------------
+
+    my $job_data = get_job($job_id);
+
+    my $job_result = $job_data->{job}->{result};
+    my $job_state  = $job_data->{job}->{state};
+
+    print "\nJob finished.\n";
+    print "  ID:     $job_id\n";
+    print "  State:  $job_state\n";
+    print "  Result: " . ($job_result // 'none') . "\n";
+
+    # --------------------------------------------------------
+    # Check result
+    # --------------------------------------------------------
+
+    if (!defined $job_result || $job_result ne 'passed') {
+
+        print "\nScenario '$name' failed.\n";
+
+        return;
+    }
+
+    # --------------------------------------------------------
+    # Check published image
+    # --------------------------------------------------------
+
+    if ($scenario->{type} eq 'image') {
+
+        my $hdds = $job_data->{job}->{assets}->{hdd} // [];
+
+        my %published = map {
+            $_ => 1
+        } @{$hdds};
+
+        unless ($published{$expected_image}) {
+
+            print "\nERROR: Expected HDD was not published:\n";
+            print "  $expected_image\n";
+
+            print "\nPublished HDD assets:\n";
+
+            for my $hdd_name (@{$hdds}) {
+                print "  $hdd_name\n";
+            }
+
+            return;
+        }
+
+        print "\nImage successfully created:\n";
+        print "  $expected_image\n";
+
+        return $expected_image;
+    }
+
+    # --------------------------------------------------------
+    # Test scenario passed
+    # --------------------------------------------------------
+
+    print "\nScenario '$name' passed.\n";
+
+    return 1;
+}
+
+# ============================================================
+# Expand variables
+# ============================================================
 
 sub expand_variables {
     my ($value, $job) = @_;
@@ -131,178 +437,8 @@ sub expand_variables {
     return $value;
 }
 
-for my $key (keys %job) {
-    $job{$key} = expand_variables(
-        $job{$key},
-        \%job
-    );
-}
-
-# ------------------------------------------------------------
-# Image scenario
-# ------------------------------------------------------------
-
-my $expected_image;
-
-if ($scenario->{type} eq 'image') {
-
-    my $image = $scenario->{image};
-
-    my $image_size = $image->{size_gb};
-
-    $expected_image = expand_variables(
-        $image->{name},
-        \%job
-    );
-
-    print "Image:\n";
-    print "  Name: $expected_image\n";
-    print "  Size: ${image_size} GB\n";
-
-    $job{HDDSIZEGB} = $image_size;
-    $job{PUBLISH_HDD_1} = $expected_image;
-}
-
-# ------------------------------------------------------------
-# Test scenario using an existing HDD
-# ------------------------------------------------------------
-
-elsif ($scenario->{type} eq 'test') {
-
-    if (defined $opt{hdd} && length $opt{hdd}) {
-
-        $job{BOOT_HDD_IMAGE} = 1;
-        $job{HDD_1} = $opt{hdd};
-
-        print "HDD:\n";
-        print "  Image: $opt{hdd}\n";
-    }
-}
-
-# ------------------------------------------------------------
-# Expand variables again
-#
-# This is important because image-specific parameters such as
-# PUBLISH_HDD_1 are added after the first expansion.
-# ------------------------------------------------------------
-
-for my $key (keys %job) {
-    $job{$key} = expand_variables(
-        $job{$key},
-        \%job
-    );
-}
-
-# ------------------------------------------------------------
-# Print job parameters
-# ------------------------------------------------------------
-
-print "\nJob parameters:\n";
-
-for my $key (sort keys %job) {
-    print "  $key=$job{$key}\n";
-}
-
-# ------------------------------------------------------------
-# Submit job
-# ------------------------------------------------------------
-
-print "\nStarting openQA job...\n";
-
-my @command = (
-    'openqa-cli',
-    'api',
-    '-X',
-    'POST',
-    'jobs',
-);
-
-for my $key (sort keys %job) {
-    push @command, "$key=$job{$key}";
-}
-
-my $response = capture_command(@command);
-
-my $data = decode_json($response);
-
-die "openQA response does not contain job id\n"
-    unless exists $data->{id};
-
-my $job_id = $data->{id};
-
-print "Job ID: $job_id\n";
-
-# ------------------------------------------------------------
-# Wait for job
-# ------------------------------------------------------------
-
-wait_for_job($job_id);
-
-# ------------------------------------------------------------
-# Get final job information
-# ------------------------------------------------------------
-
-my $job_data = get_job($job_id);
-
-my $job_result = $job_data->{job}->{result};
-my $job_state  = $job_data->{job}->{state};
-
-print "\nJob finished.\n";
-print "  ID:     $job_id\n";
-print "  State:  $job_state\n";
-print "  Result: " . ($job_result // 'none') . "\n";
-
-# ------------------------------------------------------------
-# Check result
-# ------------------------------------------------------------
-
-if (!defined $job_result || $job_result ne 'passed') {
-
-    print "\nScenario '$scenario_name' failed.\n";
-
-    exit 1;
-}
-
-# ------------------------------------------------------------
-# Check published image
-# ------------------------------------------------------------
-
-if ($scenario->{type} eq 'image') {
-
-    my $hdds = $job_data->{job}->{assets}->{hdd} // [];
-
-    my %published = map {
-        $_ => 1
-    } @{$hdds};
-
-    unless ($published{$expected_image}) {
-
-        print "\nERROR: Expected HDD was not published:\n";
-        print "  $expected_image\n";
-
-        print "\nPublished HDD assets:\n";
-
-        for my $hdd (@{$hdds}) {
-            print "  $hdd\n";
-        }
-
-        exit 1;
-    }
-
-    print "\nImage successfully created:\n";
-    print "  $expected_image\n";
-}
-
-# ------------------------------------------------------------
-# Success
-# ------------------------------------------------------------
-
-print "\nScenario '$scenario_name' passed.\n";
-
-exit 0;
-
 # ============================================================
-# Functions
+# Wait for job
 # ============================================================
 
 sub wait_for_job {
@@ -330,6 +466,10 @@ sub wait_for_job {
     }
 }
 
+# ============================================================
+# Get job
+# ============================================================
+
 sub get_job {
     my ($job_id) = @_;
 
@@ -343,6 +483,10 @@ sub get_job {
 
     return decode_json($response);
 }
+
+# ============================================================
+# Execute command and capture output
+# ============================================================
 
 sub capture_command {
     my (@command) = @_;
@@ -376,6 +520,10 @@ sub capture_command {
     return $output;
 }
 
+# ============================================================
+# Required option
+# ============================================================
+
 sub require_option {
     my ($name) = @_;
 
@@ -384,16 +532,36 @@ sub require_option {
     die "Missing required option: --$name\n";
 }
 
+# ============================================================
+# Usage
+# ============================================================
+
 sub print_usage {
     print <<"USAGE";
 Usage:
 
   $0 <scenario> [options]
 
+Scenarios:
+
+  create-base-image
+      Create base HDD image from ISO.
+
+  smoke
+      Run smoke tests using an existing HDD.
+
+  regression
+      Run regression tests using an existing HDD.
+
+  verify
+      Create base image, then run smoke and regression.
+      If any stage fails, the following stages are skipped.
+
 Required options:
 
   --distri NAME
   --version VERSION
+  --build BUILD
   --flavor FLAVOR
   --arch ARCH
   --machine MACHINE
@@ -414,6 +582,7 @@ Create base image:
   $0 create-base-image \\
       --distri os-autoinst-distri-container \\
       --version 10.2 \\
+      --build 20260818 \\
       --flavor Minimal \\
       --arch x86_64 \\
       --machine 64bit \\
@@ -425,12 +594,25 @@ Run smoke using existing HDD:
   $0 smoke \\
       --distri os-autoinst-distri-container \\
       --version 10.2 \\
+      --build 20260818 \\
       --flavor Minimal \\
       --arch x86_64 \\
       --machine 64bit \\
       --iso AlmaLinux-10.2-x86_64-minimal.iso \\
       --casedir /var/lib/openqa/tests/os-autoinst-distri-container \\
       --hdd os-autoinst-distri-container-10.2-x86_64.qcow2
+
+Run full verification:
+
+  $0 verify \\
+      --distri os-autoinst-distri-container \\
+      --version 10.2 \\
+      --build 20260818 \\
+      --flavor Minimal \\
+      --arch x86_64 \\
+      --machine 64bit \\
+      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
+      --casedir /var/lib/openqa/tests/os-autoinst-distri-container
 
 USAGE
 }

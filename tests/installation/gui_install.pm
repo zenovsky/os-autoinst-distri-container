@@ -42,4 +42,8 @@ sub run {
     assert_and_click "anaconda-installation--perform-restart";
 }
 
+sub test_flags {
+    return { fatal => 1 };
+}
+
 1;

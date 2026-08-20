@@ -3,14 +3,14 @@ name: Create base image
 type: image
 
 source:
-  scenario: installation-gui
+  scenario: installation-kickstart
 
 tests:
   - tests/system/poweroff.pm
 
 image:
   size_gb: 20
-  name: "%DISTRI%-%VERSION%-%ARCH%.qcow2"
+  name: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
 
 variables:
   QEMUCPU: host
