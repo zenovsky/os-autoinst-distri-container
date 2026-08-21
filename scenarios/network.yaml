@@ -1,0 +1,22 @@
+name: network
+type: parallel
+
+variables:
+  NICTYPE: tap
+  QEMUCPU: host
+  QEMUCPUS: 2
+  BOOT_HDD_IMAGE: 1
+  HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+
+jobs:
+
+  - name: server
+    tests:
+      - tests/system/first_boot.pm
+      - tests/network/server.pm
+
+  - name: client
+    tests:
+      - tests/system/first_boot.pm
+      - tests/network/client.pm
+    PARALLEL_WITH: server

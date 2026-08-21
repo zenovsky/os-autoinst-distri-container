@@ -16,7 +16,7 @@ use ScenarioLoader;
 # ------------------------------------------------------------
 
 my %opt = (
-    host => 'http://localhost:1080',
+    host => 'http://localhost',
     poll => 10,
 );
 
@@ -203,6 +203,17 @@ sub run_scenario {
 
     print "Scenario: $scenario->{name}\n";
     print "Type:     $scenario->{type}\n";
+
+    # --------------------------------------------------------
+    # Parallel scenario
+    # --------------------------------------------------------
+
+    if ($scenario->{type} eq 'parallel') {
+        return run_parallel_scenario(
+            $name,
+            $scenario,
+        );
+    }
 
     # --------------------------------------------------------
     # Prepare job parameters
@@ -415,6 +426,336 @@ sub run_scenario {
     # --------------------------------------------------------
 
     print "\nScenario '$name' passed.\n";
+
+    return 1;
+}
+
+# ============================================================
+# Run parallel scenario
+# ============================================================
+
+sub run_parallel_scenario {
+    my ($name, $scenario) = @_;
+
+    print "\n";
+    print "============================================================\n";
+    print "PARALLEL SCENARIO: $name\n";
+    print "============================================================\n";
+
+    my @parallel_jobs = @{$scenario->{jobs}};
+
+    #
+    # Store openQA job IDs by logical job name.
+    #
+    # Example:
+    #
+    #   server => 123
+    #   client => 124
+    #
+    my %job_ids;
+
+    # --------------------------------------------------------
+    # Start all parallel jobs
+    # --------------------------------------------------------
+
+    for my $parallel_job (@parallel_jobs) {
+
+        my $job_name = $parallel_job->{name};
+
+        print "\n";
+        print "------------------------------------------------------------\n";
+        print "Parallel job: $job_name\n";
+        print "------------------------------------------------------------\n";
+
+        # ----------------------------------------------------
+        # Prepare base job parameters
+        # ----------------------------------------------------
+
+        my %job = (
+            DISTRI  => $opt{distri},
+            VERSION => $opt{version},
+            BUILD   => $opt{build},
+            FLAVOR  => $opt{flavor},
+            ARCH    => $opt{arch},
+            MACHINE => $opt{machine},
+            BACKEND => 'qemu',
+            ISO     => $opt{iso},
+            CASEDIR => $opt{casedir},
+
+            TEST     => $job_name,
+            SCENARIO => $name,
+        );
+
+        # ----------------------------------------------------
+        # Optional ISO URL
+        # ----------------------------------------------------
+
+        if (defined $opt{iso_url} && length $opt{iso_url}) {
+            $job{ISO_URL} = $opt{iso_url};
+        }
+
+        # ----------------------------------------------------
+        # Add scenario-wide variables
+        #
+        # Example:
+        #
+        #   NICTYPE: tap
+        #   QEMUCPU: host
+        #   QEMUCPUS: 2
+        #   BOOT_HDD_IMAGE: 1
+        #   HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+        #
+        # ----------------------------------------------------
+
+        for my $key (keys %{$scenario->{variables} // {}}) {
+
+            $job{$key} = $scenario->{variables}{$key};
+        }
+
+        # ----------------------------------------------------
+        # PARALLEL_WITH
+        #
+        # Pass the value directly to openQA.
+        #
+        # Example:
+        #
+        #   client:
+        #       PARALLEL_WITH: server
+        #
+        # becomes:
+        #
+        #   PARALLEL_WITH=server
+        #
+        # ----------------------------------------------------
+
+        if (exists $parallel_job->{PARALLEL_WITH}) {
+
+            $job{PARALLEL_WITH} =
+                $parallel_job->{PARALLEL_WITH};
+        }
+
+        # ----------------------------------------------------
+        # Expand variables
+        #
+        # Example:
+        #
+        #   %DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2
+        #
+        # becomes:
+        #
+        #   os-autoinst-distri-container-10.2-20260818-x86_64.qcow2
+        #
+        # ----------------------------------------------------
+
+        for my $key (keys %job) {
+
+            $job{$key} = expand_variables(
+                $job{$key},
+                \%job
+            );
+        }
+
+        # ----------------------------------------------------
+        # If HDD_1 is specified, make sure the job boots
+        # from the existing HDD image.
+        # ----------------------------------------------------
+
+        if (defined $job{HDD_1} && length $job{HDD_1}) {
+
+            $job{BOOT_HDD_IMAGE} = 1;
+        }
+
+        # ----------------------------------------------------
+        # Print job parameters
+        # ----------------------------------------------------
+
+        print "\n";
+        print "Job parameters:\n";
+
+        for my $key (sort keys %job) {
+
+            print "  $key=$job{$key}\n";
+        }
+
+        # ----------------------------------------------------
+        # Submit job to openQA
+        # ----------------------------------------------------
+
+        print "\n";
+        print "Starting openQA job '$job_name'...\n";
+
+        my @command = (
+            'openqa-cli',
+            'api',
+            '-X',
+            'POST',
+            'jobs',
+        );
+
+        for my $key (sort keys %job) {
+
+            push @command, "$key=$job{$key}";
+        }
+
+        my $response = capture_command(@command);
+
+        my $data = decode_json($response);
+
+        die "openQA response does not contain job id "
+            . "for parallel job '$job_name'\n"
+            unless exists $data->{id};
+
+        my $job_id = $data->{id};
+
+        $job_ids{$job_name} = $job_id;
+
+        print "Job '$job_name' started.\n";
+        print "  Job ID: $job_id\n";
+
+        if (exists $job{PARALLEL_WITH}) {
+
+            print "  PARALLEL_WITH: "
+                . "$job{PARALLEL_WITH}\n";
+        }
+    }
+
+    # --------------------------------------------------------
+    # All jobs have now been submitted.
+    #
+    # This is important: we start EVERY job first and only
+    # then wait for their results.
+    #
+    # openQA itself handles PARALLEL_WITH.
+    # --------------------------------------------------------
+
+    print "\n";
+    print "============================================================\n";
+    print "All parallel jobs started\n";
+    print "============================================================\n";
+
+    for my $parallel_job (@parallel_jobs) {
+
+        my $job_name = $parallel_job->{name};
+        my $job_id   = $job_ids{$job_name};
+
+        print "  $job_name -> job $job_id\n";
+    }
+
+    # --------------------------------------------------------
+    # Wait for all jobs
+    # --------------------------------------------------------
+
+    my %job_results;
+
+    print "\n";
+    print "============================================================\n";
+    print "Waiting for parallel jobs\n";
+    print "============================================================\n";
+
+    for my $parallel_job (@parallel_jobs) {
+
+        my $job_name = $parallel_job->{name};
+        my $job_id   = $job_ids{$job_name};
+
+        print "\n";
+        print "Waiting for job '$job_name' "
+            . "(ID $job_id)...\n";
+
+        wait_for_job($job_id);
+
+        # ----------------------------------------------------
+        # Get final job information
+        # ----------------------------------------------------
+
+        my $job_data = get_job($job_id);
+
+        my $job_state =
+            $job_data->{job}->{state} // 'unknown';
+
+        my $job_result =
+            $job_data->{job}->{result};
+
+        $job_results{$job_name} = {
+            id     => $job_id,
+            state  => $job_state,
+            result => $job_result,
+        };
+
+        print "\n";
+        print "Job finished.\n";
+        print "  Name:   $job_name\n";
+        print "  ID:     $job_id\n";
+        print "  State:  $job_state\n";
+        print "  Result: "
+            . ($job_result // 'none')
+            . "\n";
+    }
+
+    # --------------------------------------------------------
+    # Check results
+    # --------------------------------------------------------
+
+    print "\n";
+    print "============================================================\n";
+    print "Parallel scenario results\n";
+    print "============================================================\n";
+
+    my $failed = 0;
+
+    for my $parallel_job (@parallel_jobs) {
+
+        my $job_name = $parallel_job->{name};
+
+        my $job_id =
+            $job_results{$job_name}->{id};
+
+        my $job_state =
+            $job_results{$job_name}->{state};
+
+        my $job_result =
+            $job_results{$job_name}->{result};
+
+        if (defined $job_result && $job_result eq 'passed') {
+
+            print "  $job_name "
+                . "(job $job_id): passed\n";
+
+        }
+        else {
+
+            print "  $job_name "
+                . "(job $job_id): "
+                . ($job_result // 'none')
+                . "\n";
+
+            $failed = 1;
+        }
+    }
+
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
+
+    if ($failed) {
+
+        print "\n";
+        print "============================================================\n";
+        print "PARALLEL SCENARIO FAILED\n";
+        print "============================================================\n";
+
+        print "\n";
+        print "Scenario '$name' failed.\n";
+
+        return;
+    }
+
+    print "\n";
+    print "============================================================\n";
+    print "PARALLEL SCENARIO PASSED\n";
+    print "============================================================\n";
+
+    print "\n";
+    print "Scenario '$name' passed.\n";
 
     return 1;
 }

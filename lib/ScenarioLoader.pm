@@ -61,7 +61,9 @@ sub _load {
     my $type = $scenario->{type};
 
     die "Unsupported scenario type '$type': $file\n"
-        unless $type eq 'test' || $type eq 'image';
+        unless $type eq 'test'
+            || $type eq 'image'
+            || $type eq 'parallel';
 
     #
     # Validate variables
@@ -129,6 +131,14 @@ sub _load {
     }
 
     #
+    # PARALLEL scenario
+    #
+
+    elsif ($type eq 'parallel') {
+        $self->_validate_parallel_scenario($scenario, $file);
+    }
+
+    #
     # Process include
     #
     if (exists $scenario->{include}) {
@@ -175,11 +185,17 @@ sub _load {
     # Final validation
     #
     if ($type eq 'test' || $type eq 'image') {
-
         die "Scenario contains no tests: $file\n"
             unless exists $scenario->{tests}
             && ref($scenario->{tests}) eq 'ARRAY'
             && @{$scenario->{tests}};
+    }
+    
+    elsif ($type eq 'parallel') {
+        die "Parallel scenario contains no jobs: $file\n"
+            unless exists $scenario->{jobs}
+            && ref($scenario->{jobs}) eq 'ARRAY'
+            && @{$scenario->{jobs}};
     }
 
     delete $seen->{$name};
@@ -267,6 +283,90 @@ sub _validate_variables {
 
         die "Variable '$key' must have a scalar value: $file\n"
             if ref($scenario->{variables}{$key});
+    }
+}
+
+sub _validate_parallel_scenario {
+    my ($self, $scenario, $file) = @_;
+
+    die "Parallel scenario must contain 'jobs': $file\n"
+        unless exists $scenario->{jobs};
+
+    die "'jobs' must be an array: $file\n"
+        unless ref($scenario->{jobs}) eq 'ARRAY';
+
+    die "Parallel scenario contains no jobs: $file\n"
+        unless @{$scenario->{jobs}};
+
+    my %job_names;
+
+    for my $job (@{$scenario->{jobs}}) {
+
+        die "Parallel job must be a mapping: $file\n"
+            unless ref($job) eq 'HASH';
+
+        die "Parallel job must contain 'name': $file\n"
+            unless exists $job->{name};
+
+        die "Parallel job name must be a non-empty string: $file\n"
+            unless defined $job->{name}
+            && !ref($job->{name})
+            && length $job->{name};
+
+        my $name = $job->{name};
+
+        die "Duplicate parallel job name '$name': $file\n"
+            if $job_names{$name}++;
+
+        die "Parallel job '$name' must contain 'tests': $file\n"
+            unless exists $job->{tests};
+
+        die "Parallel job '$name' tests must be an array: $file\n"
+            unless ref($job->{tests}) eq 'ARRAY';
+
+        die "Parallel job '$name' contains no tests: $file\n"
+            unless @{$job->{tests}};
+
+        for my $test (@{$job->{tests}}) {
+
+            die "Test path must be a non-empty string: $file\n"
+                unless defined $test
+                && !ref($test)
+                && length $test;
+
+            my $test_file = File::Spec->catfile(
+                $self->{scenario_dir},
+                '..',
+                $test
+            );
+
+            die "Test file not found: $test\n"
+                unless -f $test_file;
+        }
+
+        if (exists $job->{PARALLEL_WITH}) {
+
+            die "PARALLEL_WITH for job '$name' must be "
+                . "a non-empty string: $file\n"
+                unless defined $job->{PARALLEL_WITH}
+                && !ref($job->{PARALLEL_WITH})
+                && length $job->{PARALLEL_WITH};
+        }
+    }
+
+    #
+    # Validate PARALLEL_WITH references.
+    #
+
+    for my $job (@{$scenario->{jobs}}) {
+
+        next unless exists $job->{PARALLEL_WITH};
+
+        my $target = $job->{PARALLEL_WITH};
+
+        die "Parallel job '$job->{name}' references "
+            . "unknown job '$target': $file\n"
+            unless $job_names{$target};
     }
 }
 
