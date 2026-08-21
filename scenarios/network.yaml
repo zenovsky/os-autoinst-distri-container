@@ -11,11 +11,13 @@ variables:
 jobs:
 
   - name: server
+    test: server
     tests:
       - tests/system/first_boot.pm
       - tests/network/server.pm
 
   - name: client
+    test: client
     tests:
       - tests/system/first_boot.pm
       - tests/network/client.pm

@@ -65,17 +65,13 @@ require_option('casedir');
 require_option('build');
 
 # ------------------------------------------------------------
-# Verify
+# VERIFY
 #
-# verify is an orchestration scenario:
-#
-#   create-base-image
-#          |
-#          +-- passed --> smoke
+# create-base-image
+#        |
+#        +-- passed --> smoke
 #                         |
 #                         +-- passed --> regression
-#
-# If any stage fails, the next stage is not started.
 # ------------------------------------------------------------
 
 if ($scenario_name eq 'verify') {
@@ -86,7 +82,7 @@ if ($scenario_name eq 'verify') {
     print "============================================================\n";
 
     # --------------------------------------------------------
-    # Stage 1: create-base-image
+    # Stage 1
     # --------------------------------------------------------
 
     print "\n";
@@ -108,7 +104,7 @@ if ($scenario_name eq 'verify') {
     print "  $image\n";
 
     # --------------------------------------------------------
-    # Stage 2: smoke
+    # Stage 2
     # --------------------------------------------------------
 
     print "\n";
@@ -129,7 +125,7 @@ if ($scenario_name eq 'verify') {
     }
 
     # --------------------------------------------------------
-    # Stage 3: regression
+    # Stage 3
     # --------------------------------------------------------
 
     print "\n";
@@ -149,7 +145,7 @@ if ($scenario_name eq 'verify') {
     }
 
     # --------------------------------------------------------
-    # Verify success
+    # Success
     # --------------------------------------------------------
 
     print "\n";
@@ -168,14 +164,6 @@ if ($scenario_name eq 'verify') {
 
 # ------------------------------------------------------------
 # Normal scenario
-#
-# Existing behavior for:
-#
-#   create-base-image
-#   smoke
-#   regression
-#
-# remains unchanged.
 # ------------------------------------------------------------
 
 run_scenario($scenario_name);
@@ -209,6 +197,7 @@ sub run_scenario {
     # --------------------------------------------------------
 
     if ($scenario->{type} eq 'parallel') {
+
         return run_parallel_scenario(
             $name,
             $scenario,
@@ -216,7 +205,7 @@ sub run_scenario {
     }
 
     # --------------------------------------------------------
-    # Prepare job parameters
+    # Prepare job
     # --------------------------------------------------------
 
     my %job = (
@@ -234,30 +223,29 @@ sub run_scenario {
         SCENARIO => $name,
     );
 
-    $job{ISO_URL} = $opt{iso_url}
-        if defined $opt{iso_url} && length $opt{iso_url};
+    # --------------------------------------------------------
+    # Optional ISO URL
+    # --------------------------------------------------------
+
+    if (defined $opt{iso_url} && length $opt{iso_url}) {
+        $job{ISO_URL} = $opt{iso_url};
+    }
 
     # --------------------------------------------------------
-    # Add scenario variables
+    # Scenario variables
     # --------------------------------------------------------
 
     for my $key (keys %{$scenario->{variables} // {}}) {
+
         $job{$key} = $scenario->{variables}{$key};
     }
 
     # --------------------------------------------------------
     # Expand variables
-    #
-    # Example:
-    #
-    #   %DISTRI%-%VERSION%-%ARCH%.qcow2
-    #
-    # becomes:
-    #
-    #   os-autoinst-distri-container-10.2-x86_64.qcow2
     # --------------------------------------------------------
 
     for my $key (keys %job) {
+
         $job{$key} = expand_variables(
             $job{$key},
             \%job
@@ -285,12 +273,12 @@ sub run_scenario {
         print "  Name: $expected_image\n";
         print "  Size: ${image_size} GB\n";
 
-        $job{HDDSIZEGB} = $image_size;
+        $job{HDDSIZEGB}    = $image_size;
         $job{PUBLISH_HDD_1} = $expected_image;
     }
 
     # --------------------------------------------------------
-    # Test scenario using an existing HDD
+    # Test scenario using existing HDD
     # --------------------------------------------------------
 
     elsif ($scenario->{type} eq 'test') {
@@ -306,13 +294,11 @@ sub run_scenario {
     }
 
     # --------------------------------------------------------
-    # Expand variables again
-    #
-    # This is important because image-specific parameters such
-    # as PUBLISH_HDD_1 are added after the first expansion.
+    # Expand again
     # --------------------------------------------------------
 
     for my $key (keys %job) {
+
         $job{$key} = expand_variables(
             $job{$key},
             \%job
@@ -320,17 +306,18 @@ sub run_scenario {
     }
 
     # --------------------------------------------------------
-    # Print job parameters
+    # Print parameters
     # --------------------------------------------------------
 
     print "\nJob parameters:\n";
 
     for my $key (sort keys %job) {
+
         print "  $key=$job{$key}\n";
     }
 
     # --------------------------------------------------------
-    # Submit job
+    # Submit
     # --------------------------------------------------------
 
     print "\nStarting openQA job...\n";
@@ -344,6 +331,7 @@ sub run_scenario {
     );
 
     for my $key (sort keys %job) {
+
         push @command, "$key=$job{$key}";
     }
 
@@ -359,27 +347,32 @@ sub run_scenario {
     print "Job ID: $job_id\n";
 
     # --------------------------------------------------------
-    # Wait for job
+    # Wait
     # --------------------------------------------------------
 
     wait_for_job($job_id);
 
     # --------------------------------------------------------
-    # Get final job information
+    # Final information
     # --------------------------------------------------------
 
     my $job_data = get_job($job_id);
 
-    my $job_result = $job_data->{job}->{result};
-    my $job_state  = $job_data->{job}->{state};
+    my $job_result =
+        $job_data->{job}->{result};
+
+    my $job_state =
+        $job_data->{job}->{state};
 
     print "\nJob finished.\n";
     print "  ID:     $job_id\n";
     print "  State:  $job_state\n";
-    print "  Result: " . ($job_result // 'none') . "\n";
+    print "  Result: "
+        . ($job_result // 'none')
+        . "\n";
 
     # --------------------------------------------------------
-    # Check result
+    # Result
     # --------------------------------------------------------
 
     if (!defined $job_result || $job_result ne 'passed') {
@@ -395,7 +388,8 @@ sub run_scenario {
 
     if ($scenario->{type} eq 'image') {
 
-        my $hdds = $job_data->{job}->{assets}->{hdd} // [];
+        my $hdds =
+            $job_data->{job}->{assets}->{hdd} // [];
 
         my %published = map {
             $_ => 1
@@ -409,6 +403,7 @@ sub run_scenario {
             print "\nPublished HDD assets:\n";
 
             for my $hdd_name (@{$hdds}) {
+
                 print "  $hdd_name\n";
             }
 
@@ -422,7 +417,7 @@ sub run_scenario {
     }
 
     # --------------------------------------------------------
-    # Test scenario passed
+    # Test passed
     # --------------------------------------------------------
 
     print "\nScenario '$name' passed.\n";
@@ -444,18 +439,10 @@ sub run_parallel_scenario {
 
     my @parallel_jobs = @{$scenario->{jobs}};
 
-    #
-    # Store openQA job IDs by logical job name.
-    #
-    # Example:
-    #
-    #   server => 123
-    #   client => 124
-    #
     my %job_ids;
 
     # --------------------------------------------------------
-    # Start all parallel jobs
+    # Submit ALL jobs first
     # --------------------------------------------------------
 
     for my $parallel_job (@parallel_jobs) {
@@ -468,7 +455,29 @@ sub run_parallel_scenario {
         print "------------------------------------------------------------\n";
 
         # ----------------------------------------------------
-        # Prepare base job parameters
+        # TEST SUITE
+        #
+        # YAML:
+        #
+        #   - name: server
+        #     test: server
+        #
+        # TEST must be the test suite name.
+        #
+        # If 'test' is absent, fall back to 'name'.
+        # ----------------------------------------------------
+
+        my $test_suite =
+            exists $parallel_job->{test}
+                ? $parallel_job->{test}
+                : $job_name;
+
+        die "Parallel job '$job_name' has empty test suite\n"
+            unless defined $test_suite
+            && length $test_suite;
+
+        # ----------------------------------------------------
+        # Base job
         # ----------------------------------------------------
 
         my %job = (
@@ -482,50 +491,62 @@ sub run_parallel_scenario {
             ISO     => $opt{iso},
             CASEDIR => $opt{casedir},
 
-            TEST     => $job_name,
+            TEST     => $test_suite,
             SCENARIO => $name,
         );
 
         # ----------------------------------------------------
-        # Optional ISO URL
+        # ISO URL
         # ----------------------------------------------------
 
         if (defined $opt{iso_url} && length $opt{iso_url}) {
+
             $job{ISO_URL} = $opt{iso_url};
         }
 
         # ----------------------------------------------------
-        # Add scenario-wide variables
-        #
-        # Example:
-        #
-        #   NICTYPE: tap
-        #   QEMUCPU: host
-        #   QEMUCPUS: 2
-        #   BOOT_HDD_IMAGE: 1
-        #   HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
-        #
+        # Scenario variables
         # ----------------------------------------------------
 
         for my $key (keys %{$scenario->{variables} // {}}) {
 
-            $job{$key} = $scenario->{variables}{$key};
+            $job{$key} =
+                $scenario->{variables}{$key};
         }
+
+        # ----------------------------------------------------
+        # Test list from YAML
+        #
+        # Example:
+        #
+        # tests:
+        #   - tests/system/first_boot.pm
+        #   - tests/network/server.pm
+        #
+        # We pass the paths as TESTS.
+        #
+        # The distro main.pm is responsible for loading them.
+        # ----------------------------------------------------
+
+        my @tests = @{$parallel_job->{tests} // []};
+
+        die "Parallel job '$job_name' contains no tests\n"
+            unless @tests;
+
+        $job{TESTS} = join(',', @tests);
 
         # ----------------------------------------------------
         # PARALLEL_WITH
         #
-        # Pass the value directly to openQA.
+        # This must be passed unchanged to openQA.
         #
-        # Example:
+        # client:
         #
-        #   client:
-        #       PARALLEL_WITH: server
+        #   PARALLEL_WITH: server
         #
         # becomes:
         #
         #   PARALLEL_WITH=server
-        #
         # ----------------------------------------------------
 
         if (exists $parallel_job->{PARALLEL_WITH}) {
@@ -535,16 +556,7 @@ sub run_parallel_scenario {
         }
 
         # ----------------------------------------------------
-        # Expand variables
-        #
-        # Example:
-        #
-        #   %DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2
-        #
-        # becomes:
-        #
-        #   os-autoinst-distri-container-10.2-20260818-x86_64.qcow2
-        #
+        # HDD / boot
         # ----------------------------------------------------
 
         for my $key (keys %job) {
@@ -555,18 +567,13 @@ sub run_parallel_scenario {
             );
         }
 
-        # ----------------------------------------------------
-        # If HDD_1 is specified, make sure the job boots
-        # from the existing HDD image.
-        # ----------------------------------------------------
-
         if (defined $job{HDD_1} && length $job{HDD_1}) {
 
             $job{BOOT_HDD_IMAGE} = 1;
         }
 
         # ----------------------------------------------------
-        # Print job parameters
+        # Print parameters
         # ----------------------------------------------------
 
         print "\n";
@@ -578,7 +585,7 @@ sub run_parallel_scenario {
         }
 
         # ----------------------------------------------------
-        # Submit job to openQA
+        # Submit
         # ----------------------------------------------------
 
         print "\n";
@@ -611,6 +618,8 @@ sub run_parallel_scenario {
 
         print "Job '$job_name' started.\n";
         print "  Job ID: $job_id\n";
+        print "  TEST:   $test_suite\n";
+        print "  TESTS:  $job{TESTS}\n";
 
         if (exists $job{PARALLEL_WITH}) {
 
@@ -620,12 +629,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # All jobs have now been submitted.
-    #
-    # This is important: we start EVERY job first and only
-    # then wait for their results.
-    #
-    # openQA itself handles PARALLEL_WITH.
+    # All jobs submitted
     # --------------------------------------------------------
 
     print "\n";
@@ -642,7 +646,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Wait for all jobs
+    # Wait for ALL jobs
     # --------------------------------------------------------
 
     my %job_results;
@@ -662,10 +666,6 @@ sub run_parallel_scenario {
             . "(ID $job_id)...\n";
 
         wait_for_job($job_id);
-
-        # ----------------------------------------------------
-        # Get final job information
-        # ----------------------------------------------------
 
         my $job_data = get_job($job_id);
 
@@ -692,7 +692,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Check results
+    # Results
     # --------------------------------------------------------
 
     print "\n";
@@ -715,11 +715,11 @@ sub run_parallel_scenario {
         my $job_result =
             $job_results{$job_name}->{result};
 
-        if (defined $job_result && $job_result eq 'passed') {
+        if (defined $job_result
+            && $job_result eq 'passed') {
 
             print "  $job_name "
                 . "(job $job_id): passed\n";
-
         }
         else {
 
@@ -791,14 +791,23 @@ sub wait_for_job {
 
         my $job_data = get_job($job_id);
 
-        my $state = $job_data->{job}->{state} // 'unknown';
-        my $result = $job_data->{job}->{result};
+        my $state =
+            $job_data->{job}->{state} // 'unknown';
+
+        my $result =
+            $job_data->{job}->{result};
 
         if (defined $result && length $result) {
-            print "  Job $job_id: state=$state result=$result\n";
+
+            print "  Job $job_id: "
+                . "state=$state "
+                . "result=$result\n";
         }
         else {
-            print "  Job $job_id: state=$state result=none\n";
+
+            print "  Job $job_id: "
+                . "state=$state "
+                . "result=none\n";
         }
 
         last if $state eq 'done';
@@ -820,13 +829,14 @@ sub get_job {
         "jobs/$job_id",
     );
 
-    my $response = capture_command(@command);
+    my $response =
+        capture_command(@command);
 
     return decode_json($response);
 }
 
 # ============================================================
-# Execute command and capture output
+# Execute command
 # ============================================================
 
 sub capture_command {
@@ -842,10 +852,12 @@ sub capture_command {
     close $fh;
 
     if ($? == -1) {
+
         die "Failed to execute @command: $!\n";
     }
 
     if ($? & 127) {
+
         die sprintf(
             "Command terminated by signal %d\n",
             $? & 127
@@ -855,6 +867,7 @@ sub capture_command {
     my $exit_code = $? >> 8;
 
     if ($exit_code != 0) {
+
         die "Command exited with code $exit_code\n";
     }
 
@@ -868,7 +881,9 @@ sub capture_command {
 sub require_option {
     my ($name) = @_;
 
-    return if defined $opt{$name} && length $opt{$name};
+    return
+        if defined $opt{$name}
+        && length $opt{$name};
 
     die "Missing required option: --$name\n";
 }
@@ -896,7 +911,9 @@ Scenarios:
 
   verify
       Create base image, then run smoke and regression.
-      If any stage fails, the following stages are skipped.
+
+  network
+      Run server/client tests in parallel.
 
 Required options:
 
@@ -912,48 +929,10 @@ Required options:
 Optional:
 
   --host URL
+  --iso-url URL
   --hdd IMAGE
   --poll SECONDS
   --help
-
-Examples:
-
-Create base image:
-
-  $0 create-base-image \\
-      --distri os-autoinst-distri-container \\
-      --version 10.2 \\
-      --build 20260818 \\
-      --flavor Minimal \\
-      --arch x86_64 \\
-      --machine 64bit \\
-      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
-      --casedir /var/lib/openqa/tests/os-autoinst-distri-container
-
-Run smoke using existing HDD:
-
-  $0 smoke \\
-      --distri os-autoinst-distri-container \\
-      --version 10.2 \\
-      --build 20260818 \\
-      --flavor Minimal \\
-      --arch x86_64 \\
-      --machine 64bit \\
-      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
-      --casedir /var/lib/openqa/tests/os-autoinst-distri-container \\
-      --hdd os-autoinst-distri-container-10.2-x86_64.qcow2
-
-Run full verification:
-
-  $0 verify \\
-      --distri os-autoinst-distri-container \\
-      --version 10.2 \\
-      --build 20260818 \\
-      --flavor Minimal \\
-      --arch x86_64 \\
-      --machine 64bit \\
-      --iso AlmaLinux-10.2-x86_64-minimal.iso \\
-      --casedir /var/lib/openqa/tests/os-autoinst-distri-container
 
 USAGE
 }
