@@ -3,6 +3,7 @@ use testapi;
 use lockapi;
 
 sub run {
+    assert_script_run 'ip a';
     assert_script_run 'ip addr add 172.16.2.11/15 dev eth0';
     assert_script_run 'ip link set eth0 up';
 
