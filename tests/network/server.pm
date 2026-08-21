@@ -9,7 +9,7 @@ sub run {
 
     mutex_create 'server_ready';
 
-    sleep 60;
+    wait_for_children;
 }
 
 sub test_flags {
