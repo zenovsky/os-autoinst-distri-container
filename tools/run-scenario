@@ -444,18 +444,17 @@ sub run_parallel_scenario {
     my @parallel_jobs = @{$scenario->{jobs}};
 
     # --------------------------------------------------------
-    # Build logical-name -> job-index map
+    # Job name -> index
     # --------------------------------------------------------
 
     my %job_index;
 
     for my $index (0 .. $#parallel_jobs) {
-        my $job_name = $parallel_jobs[$index]->{name};
-        $job_index{$job_name} = $index;
+        $job_index{$parallel_jobs[$index]->{name}} = $index;
     }
 
     # --------------------------------------------------------
-    # Build ONE request
+    # Build ONE POST /jobs request
     # --------------------------------------------------------
 
     my @command = (
@@ -496,7 +495,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Expand common variables
+    # Expand variables
     # --------------------------------------------------------
 
     for my $key (keys %common) {
@@ -507,7 +506,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Create indexed parameters for EVERY job
+    # Build jobs
     # --------------------------------------------------------
 
     for my $index (0 .. $#parallel_jobs) {
@@ -530,7 +529,21 @@ sub run_parallel_scenario {
         print "  TEST:$index=$job_name\n";
 
         # ----------------------------------------------------
-        # Common parameters MUST be indexed
+        # PARALLEL_JOB
+        #
+        # This is required by the multi-machine test.
+        #
+        # server -> server
+        # client -> client
+        # ----------------------------------------------------
+
+        push @command,
+            "PARALLEL_JOB:$index=$job_name";
+
+        print "  PARALLEL_JOB:$index=$job_name\n";
+
+        # ----------------------------------------------------
+        # Common settings
         # ----------------------------------------------------
 
         for my $key (sort keys %common) {
@@ -546,14 +559,24 @@ sub run_parallel_scenario {
         }
 
         # ----------------------------------------------------
-        # Scenario
+        # SCENARIO
         # ----------------------------------------------------
 
         push @command,
             "SCENARIO:$index=$name";
 
         # ----------------------------------------------------
-        # PARALLEL_WITH
+        # Parallel dependency
+        #
+        # IMPORTANT:
+        #
+        # For POST /jobs single-set API the correct syntax is:
+        #
+        #   _PARALLEL:1=0
+        #
+        # NOT:
+        #
+        #   PARALLEL_WITH:1=0
         # ----------------------------------------------------
 
         if (exists $parallel_job->{PARALLEL_WITH}) {
@@ -569,14 +592,14 @@ sub run_parallel_scenario {
                 $job_index{$target_name};
 
             push @command,
-                "PARALLEL_WITH:$index=$target_index";
+                "_PARALLEL:$index=$target_index";
 
-            print "  PARALLEL_WITH:$index=$target_index\n";
+            print "  _PARALLEL:$index=$target_index\n";
         }
     }
 
     # --------------------------------------------------------
-    # Print parameters
+    # Print request
     # --------------------------------------------------------
 
     print "\n";
@@ -608,7 +631,7 @@ sub run_parallel_scenario {
         && ref($data->{ids}) eq 'HASH';
 
     # --------------------------------------------------------
-    # Map returned IDs to logical names
+    # Save IDs
     # --------------------------------------------------------
 
     my %job_ids;
@@ -630,7 +653,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Verify all jobs were created
+    # Verify all jobs exist
     # --------------------------------------------------------
 
     for my $index (0 .. $#parallel_jobs) {
@@ -643,7 +666,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Wait for all jobs
+    # Wait
     # --------------------------------------------------------
 
     my %job_results;
