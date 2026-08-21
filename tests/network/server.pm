@@ -1,6 +1,7 @@
 use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
+use mmapi;
 
 sub run {
     assert_script_run 'ip a';
