@@ -20,48 +20,40 @@ my $loader = ScenarioLoader->new(
 my $scenario = $loader->load($scenario_name);
 
 # ------------------------------------------------------------
-# Normal scenario
+# Parallel scenario
+#
+# Each openQA job executes only the tests assigned to that
+# logical parallel job.
 # ------------------------------------------------------------
 
-if ($scenario->{type} ne 'parallel') {
+my $parallel_job = get_var('PARALLEL_JOB');
 
-    for my $test (@{$scenario->{tests} // []}) {
+if ($scenario->{type} eq 'parallel') {
+
+    die "PARALLEL_JOB is not set\n"
+        unless defined $parallel_job
+        && length $parallel_job;
+
+    my ($job) = grep {
+        $_->{name} eq $parallel_job
+    } @{$scenario->{jobs}};
+
+    die "Parallel job '$parallel_job' not found "
+        . "in scenario '$scenario_name'\n"
+        unless $job;
+
+    for my $test (@{$job->{tests} // []}) {
         autotest::loadtest $test;
     }
 
-    1;
+    return 1;
 }
 
 # ------------------------------------------------------------
-# Parallel scenario
+# Normal test/image scenario
 # ------------------------------------------------------------
 
-my $job_name = get_var('TEST');
-
-die "TEST is not set for parallel scenario '$scenario_name'\n"
-    unless defined $job_name && length $job_name;
-
-my $parallel_job;
-
-for my $job (@{$scenario->{jobs} // []}) {
-
-    next unless defined $job->{name};
-
-    if ($job->{name} eq $job_name) {
-        $parallel_job = $job;
-        last;
-    }
-}
-
-die "Parallel job '$job_name' not found in scenario "
-    . "'$scenario_name'\n"
-    unless $parallel_job;
-
-# ------------------------------------------------------------
-# Load tests for this parallel job
-# ------------------------------------------------------------
-
-for my $test (@{$parallel_job->{tests} // []}) {
+for my $test (@{$scenario->{tests} // []}) {
     autotest::loadtest $test;
 }
 

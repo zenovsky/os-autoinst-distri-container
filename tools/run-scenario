@@ -429,6 +429,10 @@ sub run_scenario {
 # Run parallel scenario
 # ============================================================
 
+# ============================================================
+# Run parallel scenario
+# ============================================================
+
 sub run_parallel_scenario {
     my ($name, $scenario) = @_;
 
@@ -439,197 +443,342 @@ sub run_parallel_scenario {
 
     my @parallel_jobs = @{$scenario->{jobs}};
 
-    my %job_ids;
+    # --------------------------------------------------------
+    # Prepare common parameters
+    #
+    # These parameters are shared by all jobs created by the
+    # single POST /jobs request.
+    # --------------------------------------------------------
+
+    my %common_job = (
+        DISTRI  => $opt{distri},
+        VERSION => $opt{version},
+        BUILD   => $opt{build},
+        FLAVOR  => $opt{flavor},
+        ARCH    => $opt{arch},
+        MACHINE => $opt{machine},
+        BACKEND => 'qemu',
+        ISO     => $opt{iso},
+        CASEDIR => $opt{casedir},
+
+        SCENARIO => $name,
+    );
 
     # --------------------------------------------------------
-    # Submit ALL jobs first
+    # Optional ISO URL
+    # --------------------------------------------------------
+
+    if (defined $opt{iso_url} && length $opt{iso_url}) {
+        $common_job{ISO_URL} = $opt{iso_url};
+    }
+
+    # --------------------------------------------------------
+    # Add scenario-wide variables
+    # --------------------------------------------------------
+
+    for my $key (keys %{$scenario->{variables} // {}}) {
+        $common_job{$key} = $scenario->{variables}{$key};
+    }
+
+    # --------------------------------------------------------
+    # Expand variables in common parameters
+    # --------------------------------------------------------
+
+    for my $key (keys %common_job) {
+        $common_job{$key} = expand_variables(
+            $common_job{$key},
+            \%common_job
+        );
+    }
+
+    # --------------------------------------------------------
+    # Build indexed parameters for ONE POST /jobs request
+    #
+    # Example:
+    #
+    #   TEST:0=server
+    #   TEST:1=client
+    #   PARALLEL_WITH:1=server
+    #
+    # This is fundamentally different from:
+    #
+    #   POST /jobs -> server
+    #   POST /jobs -> client
+    #
+    # All jobs are submitted to openQA together.
+    # --------------------------------------------------------
+
+    my @command = (
+        'openqa-cli',
+        'api',
+        '-X',
+        'POST',
+        'jobs',
+    );
+
+    # --------------------------------------------------------
+    # Add common parameters
+    # --------------------------------------------------------
+
+    for my $key (sort keys %common_job) {
+
+        push @command,
+            "$key=$common_job{$key}";
+    }
+
+    # --------------------------------------------------------
+    # Add individual jobs
+    # --------------------------------------------------------
+
+    my @job_names;
+
+    for my $index (0 .. $#parallel_jobs) {
+
+        my $parallel_job = $parallel_jobs[$index];
+
+        my $job_name = $parallel_job->{name};
+
+        push @job_names, $job_name;
+
+        print "\n";
+        print "------------------------------------------------------------\n";
+        print "Parallel job [$index]: $job_name\n";
+        print "------------------------------------------------------------\n";
+
+        # ----------------------------------------------------
+        # TEST is indexed because several jobs are being
+        # created by the same POST request.
+        # ----------------------------------------------------
+
+        push @command,
+            "TEST:$index=$job_name";
+
+        push @command,
+            "PARALLEL_JOB:$index=$job_name";    
+
+        # ----------------------------------------------------
+        # PARALLEL_WITH
+        #
+        # Example:
+        #
+        #   client:
+        #       PARALLEL_WITH: server
+        #
+        # becomes:
+        #
+        #   PARALLEL_WITH:1=server
+        # ----------------------------------------------------
+
+        if (exists $parallel_job->{PARALLEL_WITH}) {
+
+            my $parallel_with =
+                $parallel_job->{PARALLEL_WITH};
+
+            push @command,
+                "PARALLEL_WITH:$index=$parallel_with";
+        }
+
+        # ----------------------------------------------------
+        # If this particular job specifies HDD_1, make sure
+        # it boots from the HDD image.
+        #
+        # At the moment scenario-wide variables are used, but
+        # keeping this logic here allows per-job variables later.
+        # ----------------------------------------------------
+
+        if (exists $parallel_job->{variables}) {
+
+            die "Parallel job '$job_name' variables "
+                . "must be a hash\n"
+                unless ref($parallel_job->{variables}) eq 'HASH';
+
+            for my $key (
+                keys %{$parallel_job->{variables}}
+            ) {
+
+                my $value =
+                    $parallel_job->{variables}{$key};
+
+                $value = expand_variables(
+                    $value,
+                    \%common_job
+                );
+
+                push @command,
+                    "$key:$index=$value";
+
+                if ($key eq 'HDD_1'
+                    && defined $value
+                    && length $value) {
+
+                    push @command,
+                        "BOOT_HDD_IMAGE:$index=1";
+                }
+            }
+        }
+
+        # ----------------------------------------------------
+        # TESTS
+        #
+        # The test files themselves are loaded by main.pm.
+        #
+        # We therefore only need TEST here.
+        # ----------------------------------------------------
+
+        print "  TEST:$index=$job_name\n";
+
+        if (exists $parallel_job->{PARALLEL_WITH}) {
+
+            print "  PARALLEL_WITH:$index="
+                . $parallel_job->{PARALLEL_WITH}
+                . "\n";
+        }
+    }
+
+    # --------------------------------------------------------
+    # Print complete command parameters
+    # --------------------------------------------------------
+
+    print "\n";
+    print "============================================================\n";
+    print "Submitting ALL parallel jobs in ONE request\n";
+    print "============================================================\n";
+
+    print "\nCommand parameters:\n";
+
+    for my $arg (@command[5 .. $#command]) {
+        print "  $arg\n";
+    }
+
+    # --------------------------------------------------------
+    # Submit ONE request
+    # --------------------------------------------------------
+
+    print "\n";
+    print "Starting parallel jobs...\n";
+
+    my $response = capture_command(@command);
+
+    print "\nopenQA response:\n";
+    print "$response\n";
+
+    my $data = decode_json($response);
+
+    # --------------------------------------------------------
+    # Extract job IDs
+    #
+    # Depending on openQA version the response can contain
+    # either:
+    #
+    #   ids => [...]
+    #
+    # or a single id.
+    #
+    # Handle both.
+    # --------------------------------------------------------
+
+    my @job_ids;
+
+    if (exists $data->{ids}
+        && ref($data->{ids}) eq 'ARRAY') {
+
+        @job_ids = @{$data->{ids}};
+
+    }
+    elsif (exists $data->{id}) {
+
+        @job_ids = ($data->{id});
+
+    }
+    elsif (exists $data->{jobs}
+           && ref($data->{jobs}) eq 'ARRAY') {
+
+        @job_ids = map {
+            ref($_) eq 'HASH'
+                ? $_->{id}
+                : $_
+        } @{$data->{jobs}};
+    }
+    else {
+
+        die "openQA response does not contain job IDs\n";
+    }
+
+    # --------------------------------------------------------
+    # Validate number of created jobs
+    # --------------------------------------------------------
+
+    if (@job_ids != @parallel_jobs) {
+
+        print "\n";
+        print "WARNING: Expected "
+            . scalar(@parallel_jobs)
+            . " jobs, but openQA returned "
+            . scalar(@job_ids)
+            . " job IDs.\n";
+    }
+
+    # --------------------------------------------------------
+    # Store job IDs by logical job name
+    # --------------------------------------------------------
+
+    my %job_ids;
+
+    for my $index (0 .. $#parallel_jobs) {
+
+        my $job_name = $parallel_jobs[$index]->{name};
+
+        my $job_id = $job_ids[$index];
+
+        next unless defined $job_id;
+
+        $job_ids{$job_name} = $job_id;
+
+        print "\n";
+        print "Job started:\n";
+        print "  Name: $job_name\n";
+        print "  ID:   $job_id\n";
+
+        if (exists $parallel_jobs[$index]->{PARALLEL_WITH}) {
+
+            print "  PARALLEL_WITH: "
+                . $parallel_jobs[$index]->{PARALLEL_WITH}
+                . "\n";
+        }
+    }
+
+    # --------------------------------------------------------
+    # Verify that all expected jobs were created
     # --------------------------------------------------------
 
     for my $parallel_job (@parallel_jobs) {
 
         my $job_name = $parallel_job->{name};
 
-        print "\n";
-        print "------------------------------------------------------------\n";
-        print "Parallel job: $job_name\n";
-        print "------------------------------------------------------------\n";
-
-        # ----------------------------------------------------
-        # TEST SUITE
-        #
-        # YAML:
-        #
-        #   - name: server
-        #     test: server
-        #
-        # TEST must be the test suite name.
-        #
-        # If 'test' is absent, fall back to 'name'.
-        # ----------------------------------------------------
-
-        my $test_suite =
-            exists $parallel_job->{test}
-                ? $parallel_job->{test}
-                : $job_name;
-
-        die "Parallel job '$job_name' has empty test suite\n"
-            unless defined $test_suite
-            && length $test_suite;
-
-        # ----------------------------------------------------
-        # Base job
-        # ----------------------------------------------------
-
-        my %job = (
-            DISTRI  => $opt{distri},
-            VERSION => $opt{version},
-            BUILD   => $opt{build},
-            FLAVOR  => $opt{flavor},
-            ARCH    => $opt{arch},
-            MACHINE => $opt{machine},
-            BACKEND => 'qemu',
-            ISO     => $opt{iso},
-            CASEDIR => $opt{casedir},
-
-            TEST     => $test_suite,
-            SCENARIO => $name,
-        );
-
-        # ----------------------------------------------------
-        # ISO URL
-        # ----------------------------------------------------
-
-        if (defined $opt{iso_url} && length $opt{iso_url}) {
-
-            $job{ISO_URL} = $opt{iso_url};
-        }
-
-        # ----------------------------------------------------
-        # Scenario variables
-        # ----------------------------------------------------
-
-        for my $key (keys %{$scenario->{variables} // {}}) {
-
-            $job{$key} =
-                $scenario->{variables}{$key};
-        }
-
-        # ----------------------------------------------------
-        # Test list from YAML
-        #
-        # Example:
-        #
-        # tests:
-        #   - tests/system/first_boot.pm
-        #   - tests/network/server.pm
-        #
-        # We pass the paths as TESTS.
-        #
-        # The distro main.pm is responsible for loading them.
-        # ----------------------------------------------------
-
-        my @tests = @{$parallel_job->{tests} // []};
-
-        die "Parallel job '$job_name' contains no tests\n"
-            unless @tests;
-
-        $job{TESTS} = join(',', @tests);
-
-        # ----------------------------------------------------
-        # PARALLEL_WITH
-        #
-        # This must be passed unchanged to openQA.
-        #
-        # client:
-        #
-        #   PARALLEL_WITH: server
-        #
-        # becomes:
-        #
-        #   PARALLEL_WITH=server
-        # ----------------------------------------------------
-
-        if (exists $parallel_job->{PARALLEL_WITH}) {
-
-            $job{PARALLEL_WITH} =
-                $parallel_job->{PARALLEL_WITH};
-        }
-
-        # ----------------------------------------------------
-        # HDD / boot
-        # ----------------------------------------------------
-
-        for my $key (keys %job) {
-
-            $job{$key} = expand_variables(
-                $job{$key},
-                \%job
-            );
-        }
-
-        if (defined $job{HDD_1} && length $job{HDD_1}) {
-
-            $job{BOOT_HDD_IMAGE} = 1;
-        }
-
-        # ----------------------------------------------------
-        # Print parameters
-        # ----------------------------------------------------
-
-        print "\n";
-        print "Job parameters:\n";
-
-        for my $key (sort keys %job) {
-
-            print "  $key=$job{$key}\n";
-        }
-
-        # ----------------------------------------------------
-        # Submit
-        # ----------------------------------------------------
-
-        print "\n";
-        print "Starting openQA job '$job_name'...\n";
-
-        my @command = (
-            'openqa-cli',
-            'api',
-            '-X',
-            'POST',
-            'jobs',
-        );
-
-        for my $key (sort keys %job) {
-
-            push @command, "$key=$job{$key}";
-        }
-
-        my $response = capture_command(@command);
-
-        my $data = decode_json($response);
-
-        die "openQA response does not contain job id "
-            . "for parallel job '$job_name'\n"
-            unless exists $data->{id};
-
-        my $job_id = $data->{id};
-
-        $job_ids{$job_name} = $job_id;
-
-        print "Job '$job_name' started.\n";
-        print "  Job ID: $job_id\n";
-        print "  TEST:   $test_suite\n";
-        print "  TESTS:  $job{TESTS}\n";
-
-        if (exists $job{PARALLEL_WITH}) {
-
-            print "  PARALLEL_WITH: "
-                . "$job{PARALLEL_WITH}\n";
-        }
+        die "openQA did not return job ID for "
+            . "parallel job '$job_name'\n"
+            unless exists $job_ids{$job_name};
     }
 
     # --------------------------------------------------------
-    # All jobs submitted
+    # All jobs have now been submitted.
+    #
+    # IMPORTANT:
+    #
+    # This is the point where the old implementation differed.
+    #
+    # OLD:
+    #
+    #   POST /jobs -> server
+    #   POST /jobs -> client
+    #
+    # NEW:
+    #
+    #   ONE POST /jobs
+    #       TEST:0=server
+    #       TEST:1=client
+    #       PARALLEL_WITH:1=server
+    #
     # --------------------------------------------------------
 
     print "\n";
@@ -646,7 +795,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Wait for ALL jobs
+    # Wait for all jobs
     # --------------------------------------------------------
 
     my %job_results;
@@ -666,6 +815,10 @@ sub run_parallel_scenario {
             . "(ID $job_id)...\n";
 
         wait_for_job($job_id);
+
+        # ----------------------------------------------------
+        # Get final job information
+        # ----------------------------------------------------
 
         my $job_data = get_job($job_id);
 
@@ -692,7 +845,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Results
+    # Check results
     # --------------------------------------------------------
 
     print "\n";
@@ -720,6 +873,7 @@ sub run_parallel_scenario {
 
             print "  $job_name "
                 . "(job $job_id): passed\n";
+
         }
         else {
 
