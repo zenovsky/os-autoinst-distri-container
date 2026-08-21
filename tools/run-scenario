@@ -443,11 +443,20 @@ sub run_parallel_scenario {
 
     my @parallel_jobs = @{$scenario->{jobs}};
 
+    #
+    # Map logical job names to indexes.
+    #
+    # server -> 0
+    # client -> 1
+    #
+    my %job_index;
+
+    for my $index (0 .. $#parallel_jobs) {
+        $job_index{$parallel_jobs[$index]->{name}} = $index;
+    }
+
     # --------------------------------------------------------
     # Prepare common parameters
-    #
-    # These parameters are shared by all jobs created by the
-    # single POST /jobs request.
     # --------------------------------------------------------
 
     my %common_job = (
@@ -473,7 +482,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Add scenario-wide variables
+    # Add scenario variables
     # --------------------------------------------------------
 
     for my $key (keys %{$scenario->{variables} // {}}) {
@@ -481,7 +490,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Expand variables in common parameters
+    # Expand variables
     # --------------------------------------------------------
 
     for my $key (keys %common_job) {
@@ -492,20 +501,7 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Build indexed parameters for ONE POST /jobs request
-    #
-    # Example:
-    #
-    #   TEST:0=server
-    #   TEST:1=client
-    #   PARALLEL_WITH:1=server
-    #
-    # This is fundamentally different from:
-    #
-    #   POST /jobs -> server
-    #   POST /jobs -> client
-    #
-    # All jobs are submitted to openQA together.
+    # Build ONE openQA request
     # --------------------------------------------------------
 
     my @command = (
@@ -515,6 +511,52 @@ sub run_parallel_scenario {
         'POST',
         'jobs',
     );
+
+    for my $index (0 .. $#parallel_jobs) {
+
+        my $parallel_job = $parallel_jobs[$index];
+        my $job_name     = $parallel_job->{name};
+
+        print "\n";
+        print "------------------------------------------------------------\n";
+        print "Parallel job [$index]: $job_name\n";
+        print "------------------------------------------------------------\n";
+
+        push @command,
+            "TEST:$index=$job_name";
+
+        print "  TEST:$index=$job_name\n";
+
+        # ----------------------------------------------------
+        # PARALLEL_WITH
+        #
+        # Convert logical name:
+        #
+        #   PARALLEL_WITH: server
+        #
+        # into openQA job index:
+        #
+        #   PARALLEL_WITH:1=0
+        # ----------------------------------------------------
+
+        if (exists $parallel_job->{PARALLEL_WITH}) {
+
+            my $target_name =
+                $parallel_job->{PARALLEL_WITH};
+
+            die "Parallel job '$job_name' references "
+                . "unknown job '$target_name'\n"
+                unless exists $job_index{$target_name};
+
+            my $target_index =
+                $job_index{$target_name};
+
+            push @command,
+                "PARALLEL_WITH:$index=$target_index";
+
+            print "  PARALLEL_WITH:$index=$target_index\n";
+        }
+    }
 
     # --------------------------------------------------------
     # Add common parameters
@@ -527,116 +569,24 @@ sub run_parallel_scenario {
     }
 
     # --------------------------------------------------------
-    # Add individual jobs
+    # Existing HDD
+    #
+    # For network scenario we need the base image.
     # --------------------------------------------------------
 
-    my @job_names;
+    if (exists $scenario->{variables}->{HDD_1}) {
 
-    for my $index (0 .. $#parallel_jobs) {
+        my $hdd = expand_variables(
+            $scenario->{variables}->{HDD_1},
+            \%common_job
+        );
 
-        my $parallel_job = $parallel_jobs[$index];
-
-        my $job_name = $parallel_job->{name};
-
-        push @job_names, $job_name;
-
-        print "\n";
-        print "------------------------------------------------------------\n";
-        print "Parallel job [$index]: $job_name\n";
-        print "------------------------------------------------------------\n";
-
-        # ----------------------------------------------------
-        # TEST is indexed because several jobs are being
-        # created by the same POST request.
-        # ----------------------------------------------------
-
-        push @command,
-            "TEST:$index=$job_name";
-
-        push @command,
-            "PARALLEL_JOB:$index=$job_name";    
-
-        # ----------------------------------------------------
-        # PARALLEL_WITH
-        #
-        # Example:
-        #
-        #   client:
-        #       PARALLEL_WITH: server
-        #
-        # becomes:
-        #
-        #   PARALLEL_WITH:1=server
-        # ----------------------------------------------------
-
-        if (exists $parallel_job->{PARALLEL_WITH}) {
-
-            my $parallel_with =
-                $parallel_job->{PARALLEL_WITH};
-
-            push @command,
-                "PARALLEL_WITH:$index=$parallel_with";
-        }
-
-        # ----------------------------------------------------
-        # If this particular job specifies HDD_1, make sure
-        # it boots from the HDD image.
-        #
-        # At the moment scenario-wide variables are used, but
-        # keeping this logic here allows per-job variables later.
-        # ----------------------------------------------------
-
-        if (exists $parallel_job->{variables}) {
-
-            die "Parallel job '$job_name' variables "
-                . "must be a hash\n"
-                unless ref($parallel_job->{variables}) eq 'HASH';
-
-            for my $key (
-                keys %{$parallel_job->{variables}}
-            ) {
-
-                my $value =
-                    $parallel_job->{variables}{$key};
-
-                $value = expand_variables(
-                    $value,
-                    \%common_job
-                );
-
-                push @command,
-                    "$key:$index=$value";
-
-                if ($key eq 'HDD_1'
-                    && defined $value
-                    && length $value) {
-
-                    push @command,
-                        "BOOT_HDD_IMAGE:$index=1";
-                }
-            }
-        }
-
-        # ----------------------------------------------------
-        # TESTS
-        #
-        # The test files themselves are loaded by main.pm.
-        #
-        # We therefore only need TEST here.
-        # ----------------------------------------------------
-
-        print "  TEST:$index=$job_name\n";
-
-        if (exists $parallel_job->{PARALLEL_WITH}) {
-
-            print "  PARALLEL_WITH:$index="
-                . $parallel_job->{PARALLEL_WITH}
-                . "\n";
-        }
+        push @command, "HDD_1=$hdd";
+        push @command, "BOOT_HDD_IMAGE=1";
     }
 
     # --------------------------------------------------------
-    # Print complete command parameters
+    # Print command parameters
     # --------------------------------------------------------
 
     print "\n";
@@ -660,138 +610,47 @@ sub run_parallel_scenario {
     my $response = capture_command(@command);
 
     print "\nopenQA response:\n";
-    print "$response\n";
+    print $response;
 
     my $data = decode_json($response);
 
-    # --------------------------------------------------------
-    # Extract job IDs
-    #
-    # Depending on openQA version the response can contain
-    # either:
-    #
-    #   ids => [...]
-    #
-    # or a single id.
-    #
-    # Handle both.
-    # --------------------------------------------------------
-
-    my @job_ids;
-
-    if (exists $data->{ids}
-        && ref($data->{ids}) eq 'ARRAY') {
-
-        @job_ids = @{$data->{ids}};
-
-    }
-    elsif (exists $data->{id}) {
-
-        @job_ids = ($data->{id});
-
-    }
-    elsif (exists $data->{jobs}
-           && ref($data->{jobs}) eq 'ARRAY') {
-
-        @job_ids = map {
-            ref($_) eq 'HASH'
-                ? $_->{id}
-                : $_
-        } @{$data->{jobs}};
-    }
-    else {
-
-        die "openQA response does not contain job IDs\n";
-    }
+    die "openQA response does not contain job IDs\n"
+        unless exists $data->{ids}
+        && ref($data->{ids}) eq 'HASH';
 
     # --------------------------------------------------------
-    # Validate number of created jobs
-    # --------------------------------------------------------
-
-    if (@job_ids != @parallel_jobs) {
-
-        print "\n";
-        print "WARNING: Expected "
-            . scalar(@parallel_jobs)
-            . " jobs, but openQA returned "
-            . scalar(@job_ids)
-            . " job IDs.\n";
-    }
-
-    # --------------------------------------------------------
-    # Store job IDs by logical job name
+    # Save returned job IDs
     # --------------------------------------------------------
 
     my %job_ids;
 
-    for my $index (0 .. $#parallel_jobs) {
+    for my $index (keys %{$data->{ids}}) {
 
-        my $job_name = $parallel_jobs[$index]->{name};
+        my $job_id = $data->{ids}{$index};
 
-        my $job_id = $job_ids[$index];
+        die "Invalid job index returned by openQA: $index\n"
+            unless exists $parallel_jobs[$index];
 
-        next unless defined $job_id;
+        my $job_name =
+            $parallel_jobs[$index]->{name};
 
         $job_ids{$job_name} = $job_id;
 
-        print "\n";
-        print "Job started:\n";
-        print "  Name: $job_name\n";
-        print "  ID:   $job_id\n";
-
-        if (exists $parallel_jobs[$index]->{PARALLEL_WITH}) {
-
-            print "  PARALLEL_WITH: "
-                . $parallel_jobs[$index]->{PARALLEL_WITH}
-                . "\n";
-        }
+        print "  $job_name -> job $job_id\n";
     }
 
     # --------------------------------------------------------
-    # Verify that all expected jobs were created
+    # Make sure every requested job was created
     # --------------------------------------------------------
 
-    for my $parallel_job (@parallel_jobs) {
+    for my $index (0 .. $#parallel_jobs) {
 
-        my $job_name = $parallel_job->{name};
+        my $job_name =
+            $parallel_jobs[$index]->{name};
 
         die "openQA did not return job ID for "
-            . "parallel job '$job_name'\n"
+            . "'$job_name'\n"
             unless exists $job_ids{$job_name};
-    }
-
-    # --------------------------------------------------------
-    # All jobs have now been submitted.
-    #
-    # IMPORTANT:
-    #
-    # This is the point where the old implementation differed.
-    #
-    # OLD:
-    #
-    #   POST /jobs -> server
-    #   POST /jobs -> client
-    #
-    # NEW:
-    #
-    #   ONE POST /jobs
-    #       TEST:0=server
-    #       TEST:1=client
-    #       PARALLEL_WITH:1=server
-    #
-    # --------------------------------------------------------
-
-    print "\n";
-    print "============================================================\n";
-    print "All parallel jobs started\n";
-    print "============================================================\n";
-
-    for my $parallel_job (@parallel_jobs) {
-
-        my $job_name = $parallel_job->{name};
-        my $job_id   = $job_ids{$job_name};
-
-        print "  $job_name -> job $job_id\n";
     }
 
     # --------------------------------------------------------
@@ -807,8 +666,11 @@ sub run_parallel_scenario {
 
     for my $parallel_job (@parallel_jobs) {
 
-        my $job_name = $parallel_job->{name};
-        my $job_id   = $job_ids{$job_name};
+        my $job_name =
+            $parallel_job->{name};
+
+        my $job_id =
+            $job_ids{$job_name};
 
         print "\n";
         print "Waiting for job '$job_name' "
@@ -816,11 +678,8 @@ sub run_parallel_scenario {
 
         wait_for_job($job_id);
 
-        # ----------------------------------------------------
-        # Get final job information
-        # ----------------------------------------------------
-
-        my $job_data = get_job($job_id);
+        my $job_data =
+            get_job($job_id);
 
         my $job_state =
             $job_data->{job}->{state} // 'unknown';
@@ -857,23 +716,19 @@ sub run_parallel_scenario {
 
     for my $parallel_job (@parallel_jobs) {
 
-        my $job_name = $parallel_job->{name};
+        my $job_name =
+            $parallel_job->{name};
 
         my $job_id =
             $job_results{$job_name}->{id};
 
-        my $job_state =
-            $job_results{$job_name}->{state};
-
         my $job_result =
             $job_results{$job_name}->{result};
 
-        if (defined $job_result
-            && $job_result eq 'passed') {
+        if (defined $job_result && $job_result eq 'passed') {
 
             print "  $job_name "
                 . "(job $job_id): passed\n";
-
         }
         else {
 
