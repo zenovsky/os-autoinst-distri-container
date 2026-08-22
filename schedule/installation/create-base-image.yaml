@@ -7,3 +7,4 @@ vars:
 schedule:
     - tests/installation/kickstart_install.pm
     - tests/system/first_boot.pm
+    - tests/system/poweroff.pm
