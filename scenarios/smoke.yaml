@@ -8,7 +8,6 @@ variables:
   QEMUCPUS: 2
   BOOT_HDD_IMAGE: 1
   HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
-  NICTYPE: tap
 
 tests:
   - tests/system/first_boot.pm

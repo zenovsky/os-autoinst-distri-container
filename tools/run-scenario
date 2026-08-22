@@ -52,7 +52,7 @@ die "--poll must be greater than 0\n"
     if $opt{poll} <= 0;
 
 # ------------------------------------------------------------
-# Validate common parameters
+# Common options
 # ------------------------------------------------------------
 
 require_option('distri');
@@ -65,110 +65,15 @@ require_option('casedir');
 require_option('build');
 
 # ------------------------------------------------------------
-# VERIFY
-#
-# create-base-image
-#        |
-#        +-- passed --> smoke
-#                         |
-#                         +-- passed --> regression
+# Run requested scenario
 # ------------------------------------------------------------
 
-if ($scenario_name eq 'verify') {
+my $result =
+    run_scenario($scenario_name);
 
-    print "\n";
-    print "============================================================\n";
-    print "VERIFY\n";
-    print "============================================================\n";
-
-    # --------------------------------------------------------
-    # Stage 1
-    # --------------------------------------------------------
-
-    print "\n";
-    print "------------------------------------------------------------\n";
-    print "Stage 1/3: create-base-image\n";
-    print "------------------------------------------------------------\n";
-
-    my $image = run_scenario('create-base-image');
-
-    unless ($image) {
-        print "\n";
-        print "ERROR: create-base-image did not produce an HDD image.\n";
-        print "Smoke and regression will NOT be started.\n";
-        exit 1;
-    }
-
-    print "\n";
-    print "Base image is ready:\n";
-    print "  $image\n";
-
-    # --------------------------------------------------------
-    # Stage 2
-    # --------------------------------------------------------
-
-    print "\n";
-    print "------------------------------------------------------------\n";
-    print "Stage 2/3: smoke\n";
-    print "------------------------------------------------------------\n";
-
-    my $smoke_result = run_scenario(
-        'smoke',
-        hdd => $image,
-    );
-
-    unless ($smoke_result) {
-        print "\n";
-        print "ERROR: smoke failed.\n";
-        print "Regression will NOT be started.\n";
-        exit 1;
-    }
-
-    # --------------------------------------------------------
-    # Stage 3
-    # --------------------------------------------------------
-
-    print "\n";
-    print "------------------------------------------------------------\n";
-    print "Stage 3/3: regression\n";
-    print "------------------------------------------------------------\n";
-
-    my $regression_result = run_scenario(
-        'regression',
-        hdd => $image,
-    );
-
-    unless ($regression_result) {
-        print "\n";
-        print "ERROR: regression failed.\n";
-        exit 1;
-    }
-
-    # --------------------------------------------------------
-    # Success
-    # --------------------------------------------------------
-
-    print "\n";
-    print "============================================================\n";
-    print "VERIFY PASSED\n";
-    print "============================================================\n";
-
-    print "\n";
-    print "All stages passed:\n";
-    print "  create-base-image: passed\n";
-    print "  smoke:             passed\n";
-    print "  regression:        passed\n";
-
-    exit 0;
-}
-
-# ------------------------------------------------------------
-# Normal scenario
-# ------------------------------------------------------------
-
-run_scenario($scenario_name);
-
-exit 0;
+exit(
+    $result ? 0 : 1
+);
 
 # ============================================================
 # Run scenario
@@ -179,22 +84,31 @@ sub run_scenario {
 
     my $hdd = $args{hdd};
 
-    # --------------------------------------------------------
-    # Load scenario
-    # --------------------------------------------------------
-
     my $loader = ScenarioLoader->new(
         scenario_dir => "$Bin/../scenarios"
     );
 
-    my $scenario = $loader->load($name);
+    my $scenario =
+        $loader->load($name);
 
     print "Scenario: $scenario->{name}\n";
     print "Type:     $scenario->{type}\n";
 
-    # --------------------------------------------------------
-    # Parallel scenario
-    # --------------------------------------------------------
+    #
+    # VERIFY
+    #
+
+    if ($scenario->{type} eq 'verify') {
+
+        return run_verify_scenario(
+            $name,
+            $scenario,
+        );
+    }
+
+    #
+    # PARALLEL
+    #
 
     if ($scenario->{type} eq 'parallel') {
 
@@ -204,9 +118,208 @@ sub run_scenario {
         );
     }
 
-    # --------------------------------------------------------
-    # Prepare job
-    # --------------------------------------------------------
+    #
+    # TEST / IMAGE
+    #
+
+    my %job = build_common_job(
+        $name,
+        $scenario,
+    );
+
+    #
+    # Existing HDD
+    #
+
+    if (
+        $scenario->{type} eq 'test'
+        && defined $hdd
+        && length $hdd
+    ) {
+
+        $job{BOOT_HDD_IMAGE} = 1;
+        $job{HDD_1} = $hdd;
+
+        print "HDD:\n";
+        print "  Image: $hdd\n";
+    }
+
+    #
+    # IMAGE
+    #
+
+    my $expected_image;
+
+    if ($scenario->{type} eq 'image') {
+
+        my $image =
+            $scenario->{image};
+
+        my $image_size =
+            $image->{size_gb};
+
+        $expected_image =
+            expand_variables(
+                $image->{name},
+                \%job
+            );
+
+        print "Image:\n";
+        print "  Name: $expected_image\n";
+        print "  Size: ${image_size} GB\n";
+
+        $job{HDDSIZEGB} =
+            $image_size;
+
+        $job{PUBLISH_HDD_1} =
+            $expected_image;
+    }
+
+    #
+    # Expand
+    #
+
+    expand_job_variables(
+        \%job
+    );
+
+    #
+    # Print
+    #
+
+    print "\nJob parameters:\n";
+
+    print_job_parameters(
+        \%job
+    );
+
+    #
+    # Submit
+    #
+
+    print "\nStarting openQA job...\n";
+
+    my @command = (
+        'openqa-cli',
+        'api',
+        '-X',
+        'POST',
+        'jobs',
+    );
+
+    for my $key (
+        sort keys %job
+    ) {
+
+        push @command,
+            "$key=$job{$key}";
+    }
+
+    my $response =
+        capture_command(
+            @command
+        );
+
+    my $data =
+        decode_json($response);
+
+    die "openQA response does not contain job id\n"
+        unless exists $data->{id};
+
+    my $job_id =
+        $data->{id};
+
+    print "Job ID: $job_id\n";
+
+    #
+    # Wait
+    #
+
+    wait_for_job(
+        $job_id
+    );
+
+    #
+    # Final information
+    #
+
+    my $job_data =
+        get_job($job_id);
+
+    my $job_result =
+        $job_data->{job}->{result};
+
+    my $job_state =
+        $job_data->{job}->{state};
+
+    print "\nJob finished.\n";
+    print "  ID:     $job_id\n";
+    print "  State:  $job_state\n";
+    print "  Result: "
+        . ($job_result // 'none')
+        . "\n";
+
+    unless (
+        defined $job_result
+        && $job_result eq 'passed'
+    ) {
+
+        print "\nScenario '$name' failed.\n";
+
+        return;
+    }
+
+    #
+    # Verify published image
+    #
+
+    if ($scenario->{type} eq 'image') {
+
+        my $hdds =
+            $job_data->{job}->{assets}->{hdd}
+            // [];
+
+        my %published =
+            map {
+                $_ => 1
+            } @{$hdds};
+
+        unless (
+            $published{$expected_image}
+        ) {
+
+            print "\nERROR: Expected HDD was not published:\n";
+            print "  $expected_image\n";
+
+            print "\nPublished HDD assets:\n";
+
+            for my $hdd_name (
+                @{$hdds}
+            ) {
+
+                print "  $hdd_name\n";
+            }
+
+            return;
+        }
+
+        print "\nImage successfully created:\n";
+        print "  $expected_image\n";
+
+        return $expected_image;
+    }
+
+    print "\nScenario '$name' passed.\n";
+
+    return 1;
+}
+
+# ============================================================
+# Build common job
+# ============================================================
+
+sub build_common_job {
+    my ($name, $scenario) = @_;
 
     my %job = (
         DISTRI  => $opt{distri},
@@ -223,104 +336,490 @@ sub run_scenario {
         SCENARIO => $name,
     );
 
-    # --------------------------------------------------------
-    # Optional ISO URL
-    # --------------------------------------------------------
+    if (
+        defined $opt{iso_url}
+        && length $opt{iso_url}
+    ) {
 
-    if (defined $opt{iso_url} && length $opt{iso_url}) {
-        $job{ISO_URL} = $opt{iso_url};
+        $job{ISO_URL} =
+            $opt{iso_url};
     }
 
-    # --------------------------------------------------------
+    #
     # Scenario variables
-    # --------------------------------------------------------
+    #
 
-    for my $key (keys %{$scenario->{variables} // {}}) {
+    for my $key (
+        keys %{$scenario->{variables} // {}}
+    ) {
 
-        $job{$key} = $scenario->{variables}{$key};
+        $job{$key} =
+            $scenario->{variables}{$key};
     }
 
-    # --------------------------------------------------------
-    # Expand variables
-    # --------------------------------------------------------
+    expand_job_variables(
+        \%job
+    );
 
-    for my $key (keys %job) {
+    return %job;
+}
 
-        $job{$key} = expand_variables(
-            $job{$key},
-            \%job
+# ============================================================
+# Expand job variables
+# ============================================================
+
+sub expand_job_variables {
+    my ($job) = @_;
+
+    for my $key (
+        keys %{$job}
+    ) {
+
+        $job->{$key} =
+            expand_variables(
+                $job->{$key},
+                $job
+            );
+    }
+
+    #
+    # Second pass because variables can depend
+    # on variables defined in the first pass.
+    #
+
+    for my $key (
+        keys %{$job}
+    ) {
+
+        $job->{$key} =
+            expand_variables(
+                $job->{$key},
+                $job
+            );
+    }
+}
+
+# ============================================================
+# Run VERIFY scenario
+# ============================================================
+
+sub run_verify_scenario {
+    my ($name, $scenario) = @_;
+
+    print "\n";
+    print "============================================================\n";
+    print "VERIFY SCENARIO: $name\n";
+    print "============================================================\n";
+
+    my $loader =
+        ScenarioLoader->new(
+            scenario_dir => "$Bin/../scenarios"
         );
+
+    my @stages =
+        @{$scenario->{stages}};
+
+    #
+    # Stage name -> stage index
+    #
+
+    my %stage_index;
+
+    for my $index (
+        0 .. $#stages
+    ) {
+
+        my $stage_name =
+            $stages[$index]->{name};
+
+        $stage_index{$stage_name} =
+            $index;
     }
 
-    # --------------------------------------------------------
-    # Image scenario
-    # --------------------------------------------------------
+    #
+    # Build one flat list of openQA jobs.
+    #
+    # Each verify stage may expand to:
+    #
+    #   image    -> 1 job
+    #   test     -> 1 job
+    #   parallel -> N jobs
+    #
 
-    my $expected_image;
+    my @jobs;
 
-    if ($scenario->{type} eq 'image') {
+    #
+    # stage name -> list of generated job indexes
+    #
 
-        my $image = $scenario->{image};
+    my %stage_jobs;
 
-        my $image_size = $image->{size_gb};
+    #
+    # Image generated by image stage.
+    #
 
-        $expected_image = expand_variables(
-            $image->{name},
-            \%job
-        );
+    my $verify_image;
 
-        print "Image:\n";
-        print "  Name: $expected_image\n";
-        print "  Size: ${image_size} GB\n";
+    for my $stage_index (
+        0 .. $#stages
+    ) {
 
-        $job{HDDSIZEGB}    = $image_size;
-        $job{PUBLISH_HDD_1} = $expected_image;
-    }
+        my $stage =
+            $stages[$stage_index];
 
-    # --------------------------------------------------------
-    # Test scenario using existing HDD
-    # --------------------------------------------------------
+        my $stage_name =
+            $stage->{name};
 
-    elsif ($scenario->{type} eq 'test') {
+        my $type =
+            $stage->{type};
 
-        if (defined $hdd && length $hdd) {
+        my $scenario_name =
+            $stage->{scenario};
 
-            $job{BOOT_HDD_IMAGE} = 1;
-            $job{HDD_1} = $hdd;
+        my $child_scenario =
+            $loader->load(
+                $scenario_name
+            );
 
-            print "HDD:\n";
-            print "  Image: $hdd\n";
+        #
+        # ----------------------------------------------------
+        # IMAGE
+        # ----------------------------------------------------
+        #
+
+        if ($type eq 'image') {
+
+            my %job =
+                build_common_job(
+                    $stage_name,
+                    $child_scenario,
+                );
+
+            #
+            # Image configuration
+            #
+
+            my $image =
+                $child_scenario->{image};
+
+            my $expected_image =
+                expand_variables(
+                    $image->{name},
+                    \%job
+                );
+
+            $job{HDDSIZEGB} =
+                $image->{size_gb};
+
+            $job{PUBLISH_HDD_1} =
+                $expected_image;
+
+            #
+            # Remember image for downstream stages.
+            #
+
+            $verify_image =
+                $expected_image;
+
+            #
+            # Register job
+            #
+
+            my $index =
+                scalar @jobs;
+
+            $job{TEST} =
+                $stage_name;
+
+            $job{SCENARIO} =
+                $scenario_name;
+
+            $jobs[$index] = {
+                index => $index,
+                name  => $stage_name,
+                type  => 'image',
+                stage => $stage_name,
+                params => \%job,
+            };
+
+            $stage_jobs{$stage_name} =
+                [$index];
+
+            next;
+        }
+
+        #
+        # ----------------------------------------------------
+        # TEST
+        # ----------------------------------------------------
+        #
+
+        if ($type eq 'test') {
+
+            my %job =
+                build_common_job(
+                    $stage_name,
+                    $child_scenario,
+                );
+
+            $job{TEST} =
+                $stage_name;
+
+            $job{SCENARIO} =
+                $scenario_name;
+
+            #
+            # If image stage exists, use its HDD.
+            #
+
+            if (
+                defined $verify_image
+                && length $verify_image
+            ) {
+
+                $job{BOOT_HDD_IMAGE} = 1;
+                $job{HDD_1} =
+                    $verify_image;
+            }
+
+            my $index =
+                scalar @jobs;
+
+            $jobs[$index] = {
+                index => $index,
+                name  => $stage_name,
+                type  => 'test',
+                stage => $stage_name,
+                params => \%job,
+            };
+
+            $stage_jobs{$stage_name} =
+                [$index];
+
+            next;
+        }
+
+        #
+        # ----------------------------------------------------
+        # PARALLEL
+        # ----------------------------------------------------
+        #
+
+        if ($type eq 'parallel') {
+
+            my @parallel_jobs =
+                @{$child_scenario->{jobs}};
+
+            my %parallel_index;
+
+            #
+            # Local parallel job name -> global job index
+            #
+
+            for my $parallel_job (
+                @parallel_jobs
+            ) {
+
+                my $parallel_name =
+                    $parallel_job->{name};
+
+                my $index =
+                    scalar @jobs;
+
+                $parallel_index{$parallel_name} =
+                    $index;
+
+                my %job =
+                    build_common_job(
+                        $parallel_name,
+                        $child_scenario,
+                    );
+
+                $job{TEST} =
+                    $parallel_name;
+
+                $job{SCENARIO} =
+                    $scenario_name;
+
+                $job{PARALLEL_JOB} =
+                    $parallel_name;
+
+                #
+                # Existing verify image
+                #
+
+                if (
+                    defined $verify_image
+                    && length $verify_image
+                ) {
+
+                    $job{BOOT_HDD_IMAGE} = 1;
+                    $job{HDD_1} =
+                        $verify_image;
+                }
+
+                $jobs[$index] = {
+                    index => $index,
+                    name  => $parallel_name,
+                    type  => 'parallel',
+                    stage => $stage_name,
+                    params => \%job,
+
+                    #
+                    # Save local dependency.
+                    #
+
+                    parallel_with =>
+                        $parallel_job->{PARALLEL_WITH},
+                };
+
+                push @{$stage_jobs{$stage_name}},
+                    $index;
+            }
+
+            #
+            # Resolve local PARALLEL_WITH.
+            #
+
+            for my $parallel_job (
+                @parallel_jobs
+            ) {
+
+                next
+                    unless exists
+                    $parallel_job->{PARALLEL_WITH};
+
+                my $job_name =
+                    $parallel_job->{name};
+
+                my $target =
+                    $parallel_job->{PARALLEL_WITH};
+
+                die "Parallel job '$job_name' in verify "
+                    . "stage '$stage_name' references "
+                    . "unknown job '$target'\n"
+                    unless exists
+                    $parallel_index{$target};
+
+                my $global_index =
+                    $parallel_index{$job_name};
+
+                my $target_index =
+                    $parallel_index{$target};
+
+                $jobs[$global_index]->{parallel_with_index} =
+                    $target_index;
+            }
+
+            next;
         }
     }
 
+    #
     # --------------------------------------------------------
-    # Expand again
+    # Resolve START_AFTER_TEST
     # --------------------------------------------------------
+    #
 
-    for my $key (keys %job) {
+    for my $stage (
+        @stages
+    ) {
 
-        $job{$key} = expand_variables(
-            $job{$key},
-            \%job
-        );
+        next
+            unless exists
+            $stage->{START_AFTER_TEST};
+
+        my @targets;
+
+        if (
+            ref($stage->{START_AFTER_TEST})
+            eq 'ARRAY'
+        ) {
+
+            @targets =
+                @{$stage->{START_AFTER_TEST}};
+        }
+        else {
+
+            @targets =
+                ($stage->{START_AFTER_TEST});
+        }
+
+        my @parent_indexes;
+
+        for my $target (
+            @targets
+        ) {
+
+            die "Unknown START_AFTER_TEST target "
+                . "'$target'\n"
+                unless exists
+                $stage_jobs{$target};
+
+            push @parent_indexes,
+                @{$stage_jobs{$target}};
+        }
+
+        #
+        # Every job in this stage waits for
+        # every job generated by parent stages.
+        #
+
+        for my $job_index (
+            @{$stage_jobs{$stage->{name}}}
+        ) {
+
+            $jobs[$job_index]->{start_after} =
+                [@parent_indexes];
+        }
     }
 
+    #
     # --------------------------------------------------------
-    # Print parameters
+    # Print scenario graph
     # --------------------------------------------------------
+    #
 
-    print "\nJob parameters:\n";
+    print "\n";
+    print "Verify dependency graph:\n";
 
-    for my $key (sort keys %job) {
+    for my $job (
+        @jobs
+    ) {
 
-        print "  $key=$job{$key}\n";
+        print "\n";
+        print "  [$job->{index}] $job->{name}";
+        print " ($job->{type})";
+
+        if (
+            exists $job->{start_after}
+            && @{$job->{start_after}}
+        ) {
+
+            print "\n";
+            print "      START_AFTER_TEST: ";
+
+            print join(
+                ',',
+                @{$job->{start_after}}
+            );
+        }
+
+        if (
+            exists $job->{parallel_with_index}
+        ) {
+
+            print "\n";
+            print "      PARALLEL_WITH: "
+                . $job->{parallel_with_index};
+        }
     }
 
+    #
     # --------------------------------------------------------
-    # Submit
+    # Build ONE POST /jobs request
     # --------------------------------------------------------
-
-    print "\nStarting openQA job...\n";
+    #
 
     my @command = (
         'openqa-cli',
@@ -330,104 +829,261 @@ sub run_scenario {
         'jobs',
     );
 
-    for my $key (sort keys %job) {
+    for my $job (
+        @jobs
+    ) {
 
-        push @command, "$key=$job{$key}";
+        my $index =
+            $job->{index};
+
+        #
+        # Job parameters
+        #
+
+        for my $key (
+            sort keys %{$job->{params}}
+        ) {
+
+            my $value =
+                $job->{params}{$key};
+
+            next
+                unless defined $value;
+
+            push @command,
+                "$key:$index=$value";
+        }
+
+        #
+        # START_AFTER
+        #
+
+        if (
+            exists $job->{start_after}
+            && @{$job->{start_after}}
+        ) {
+
+            my $value =
+                join(
+                    ',',
+                    @{$job->{start_after}}
+                );
+
+            push @command,
+                "_START_AFTER:$index=$value";
+        }
+
+        #
+        # PARALLEL
+        #
+
+        if (
+            exists $job->{parallel_with_index}
+        ) {
+
+            push @command,
+                "_PARALLEL:$index="
+                . $job->{parallel_with_index};
+        }
     }
 
-    my $response = capture_command(@command);
+    #
+    # --------------------------------------------------------
+    # Print request
+    # --------------------------------------------------------
+    #
 
-    my $data = decode_json($response);
+    print "\n";
+    print "\n";
+    print "============================================================\n";
+    print "Submitting VERIFY jobs in ONE request\n";
+    print "============================================================\n";
 
-    die "openQA response does not contain job id\n"
-        unless exists $data->{id};
+    print "\nCommand parameters:\n";
 
-    my $job_id = $data->{id};
+    for my $arg (
+        @command[5 .. $#command]
+    ) {
 
-    print "Job ID: $job_id\n";
+        print "  $arg\n";
+    }
 
+    #
+    # --------------------------------------------------------
+    # Submit
+    # --------------------------------------------------------
+    #
+
+    print "\nStarting verify jobs...\n";
+
+    my $response =
+        capture_command(
+            @command
+        );
+
+    print "\nopenQA response:\n";
+    print $response;
+
+    my $data =
+        decode_json($response);
+
+    die "openQA response does not contain job IDs\n"
+        unless exists $data->{ids}
+        && ref($data->{ids}) eq 'HASH';
+
+    #
+    # --------------------------------------------------------
+    # Save IDs
+    # --------------------------------------------------------
+    #
+
+    my %job_ids;
+
+    for my $index (
+        keys %{$data->{ids}}
+    ) {
+
+        die "Invalid job index returned by openQA: $index\n"
+            unless exists $jobs[$index];
+
+        my $job_name =
+            $jobs[$index]->{name};
+
+        my $job_id =
+            $data->{ids}{$index};
+
+        $job_ids{$index} =
+            $job_id;
+
+        print "  [$index] $job_name -> job $job_id\n";
+    }
+
+    #
+    # Verify all jobs got IDs.
+    #
+
+    for my $job (
+        @jobs
+    ) {
+
+        my $index =
+            $job->{index};
+
+        die "openQA did not return job ID for "
+            . "'$job->{name}'\n"
+            unless exists
+            $job_ids{$index};
+    }
+
+    #
     # --------------------------------------------------------
     # Wait
     # --------------------------------------------------------
+    #
 
-    wait_for_job($job_id);
+    print "\n";
+    print "============================================================\n";
+    print "Waiting for verify jobs\n";
+    print "============================================================\n";
 
-    # --------------------------------------------------------
-    # Final information
-    # --------------------------------------------------------
+    my $failed = 0;
 
-    my $job_data = get_job($job_id);
+    for my $job (
+        @jobs
+    ) {
 
-    my $job_result =
-        $job_data->{job}->{result};
+        my $index =
+            $job->{index};
 
-    my $job_state =
-        $job_data->{job}->{state};
+        my $job_id =
+            $job_ids{$index};
 
-    print "\nJob finished.\n";
-    print "  ID:     $job_id\n";
-    print "  State:  $job_state\n";
-    print "  Result: "
-        . ($job_result // 'none')
-        . "\n";
+        print "\n";
+        print "Waiting for '$job->{name}' "
+            . "(ID $job_id)...\n";
 
+        wait_for_job(
+            $job_id
+        );
+
+        my $job_data =
+            get_job($job_id);
+
+        my $state =
+            $job_data->{job}->{state}
+            // 'unknown';
+
+        my $result =
+            $job_data->{job}->{result};
+
+        print "\n";
+        print "Job finished.\n";
+        print "  Name:   $job->{name}\n";
+        print "  ID:     $job_id\n";
+        print "  State:  $state\n";
+        print "  Result: "
+            . ($result // 'none')
+            . "\n";
+
+        unless (
+            defined $result
+            && $result eq 'passed'
+        ) {
+
+            $failed = 1;
+        }
+    }
+
+    #
     # --------------------------------------------------------
     # Result
     # --------------------------------------------------------
+    #
 
-    if (!defined $job_result || $job_result ne 'passed') {
+    print "\n";
+    print "============================================================\n";
+    print "VERIFY RESULTS\n";
+    print "============================================================\n";
 
-        print "\nScenario '$name' failed.\n";
+    for my $job (
+        @jobs
+    ) {
+
+        my $index =
+            $job->{index};
+
+        my $job_id =
+            $job_ids{$index};
+
+        my $job_data =
+            get_job($job_id);
+
+        my $result =
+            $job_data->{job}->{result};
+
+        print "  $job->{name} "
+            . "(job $job_id): "
+            . ($result // 'none')
+            . "\n";
+    }
+
+    if ($failed) {
+
+        print "\n";
+        print "============================================================\n";
+        print "VERIFY FAILED\n";
+        print "============================================================\n";
 
         return;
     }
 
-    # --------------------------------------------------------
-    # Check published image
-    # --------------------------------------------------------
-
-    if ($scenario->{type} eq 'image') {
-
-        my $hdds =
-            $job_data->{job}->{assets}->{hdd} // [];
-
-        my %published = map {
-            $_ => 1
-        } @{$hdds};
-
-        unless ($published{$expected_image}) {
-
-            print "\nERROR: Expected HDD was not published:\n";
-            print "  $expected_image\n";
-
-            print "\nPublished HDD assets:\n";
-
-            for my $hdd_name (@{$hdds}) {
-
-                print "  $hdd_name\n";
-            }
-
-            return;
-        }
-
-        print "\nImage successfully created:\n";
-        print "  $expected_image\n";
-
-        return $expected_image;
-    }
-
-    # --------------------------------------------------------
-    # Test passed
-    # --------------------------------------------------------
-
-    print "\nScenario '$name' passed.\n";
+    print "\n";
+    print "============================================================\n";
+    print "VERIFY PASSED\n";
+    print "============================================================\n";
 
     return 1;
 }
-
-# ============================================================
-# Run parallel scenario
-# ============================================================
 
 # ============================================================
 # Run parallel scenario
@@ -441,21 +1097,27 @@ sub run_parallel_scenario {
     print "PARALLEL SCENARIO: $name\n";
     print "============================================================\n";
 
-    my @parallel_jobs = @{$scenario->{jobs}};
+    my @parallel_jobs =
+        @{$scenario->{jobs}};
 
-    # --------------------------------------------------------
+    #
     # Job name -> index
-    # --------------------------------------------------------
+    #
 
     my %job_index;
 
-    for my $index (0 .. $#parallel_jobs) {
-        $job_index{$parallel_jobs[$index]->{name}} = $index;
+    for my $index (
+        0 .. $#parallel_jobs
+    ) {
+
+        $job_index{
+            $parallel_jobs[$index]->{name}
+        } = $index;
     }
 
-    # --------------------------------------------------------
-    # Build ONE POST /jobs request
-    # --------------------------------------------------------
+    #
+    # ONE POST /jobs
+    #
 
     my @command = (
         'openqa-cli',
@@ -465,9 +1127,9 @@ sub run_parallel_scenario {
         'jobs',
     );
 
-    # --------------------------------------------------------
+    #
     # Common parameters
-    # --------------------------------------------------------
+    #
 
     my %common = (
         DISTRI  => $opt{distri},
@@ -482,111 +1144,96 @@ sub run_parallel_scenario {
         SCENARIO => $name,
     );
 
-    if (defined $opt{iso_url} && length $opt{iso_url}) {
-        $common{ISO_URL} = $opt{iso_url};
+    if (
+        defined $opt{iso_url}
+        && length $opt{iso_url}
+    ) {
+
+        $common{ISO_URL} =
+            $opt{iso_url};
     }
 
-    # --------------------------------------------------------
+    #
     # Scenario variables
-    # --------------------------------------------------------
+    #
 
-    for my $key (keys %{$scenario->{variables} // {}}) {
-        $common{$key} = $scenario->{variables}{$key};
+    for my $key (
+        keys %{$scenario->{variables} // {}}
+    ) {
+
+        $common{$key} =
+            $scenario->{variables}{$key};
     }
 
-    # --------------------------------------------------------
-    # Expand variables
-    # --------------------------------------------------------
+    expand_job_variables(
+        \%common
+    );
 
-    for my $key (keys %common) {
-        $common{$key} = expand_variables(
-            $common{$key},
-            \%common
-        );
-    }
-
-    # --------------------------------------------------------
+    #
     # Build jobs
-    # --------------------------------------------------------
+    #
 
-    for my $index (0 .. $#parallel_jobs) {
+    for my $index (
+        0 .. $#parallel_jobs
+    ) {
 
-        my $parallel_job = $parallel_jobs[$index];
-        my $job_name     = $parallel_job->{name};
+        my $parallel_job =
+            $parallel_jobs[$index];
+
+        my $job_name =
+            $parallel_job->{name};
 
         print "\n";
         print "------------------------------------------------------------\n";
         print "Parallel job [$index]: $job_name\n";
         print "------------------------------------------------------------\n";
 
-        # ----------------------------------------------------
-        # TEST
-        # ----------------------------------------------------
-
         push @command,
             "TEST:$index=$job_name";
 
         print "  TEST:$index=$job_name\n";
-
-        # ----------------------------------------------------
-        # PARALLEL_JOB
-        #
-        # This is required by the multi-machine test.
-        #
-        # server -> server
-        # client -> client
-        # ----------------------------------------------------
 
         push @command,
             "PARALLEL_JOB:$index=$job_name";
 
         print "  PARALLEL_JOB:$index=$job_name\n";
 
-        # ----------------------------------------------------
-        # Common settings
-        # ----------------------------------------------------
+        for my $key (
+            sort keys %common
+        ) {
 
-        for my $key (sort keys %common) {
+            next
+                if $key eq 'SCENARIO';
 
-            next if $key eq 'SCENARIO';
+            my $value =
+                $common{$key};
 
-            my $value = $common{$key};
-
-            next unless defined $value;
+            next
+                unless defined $value;
 
             push @command,
                 "$key:$index=$value";
         }
 
-        # ----------------------------------------------------
-        # SCENARIO
-        # ----------------------------------------------------
-
         push @command,
             "SCENARIO:$index=$name";
 
-        # ----------------------------------------------------
-        # Parallel dependency
         #
-        # IMPORTANT:
+        # _PARALLEL
         #
-        # For POST /jobs single-set API the correct syntax is:
-        #
-        #   _PARALLEL:1=0
-        #
-        # NOT:
-        #
-        #   PARALLEL_WITH:1=0
-        # ----------------------------------------------------
 
-        if (exists $parallel_job->{PARALLEL_WITH}) {
+        if (
+            exists
+            $parallel_job->{PARALLEL_WITH}
+        ) {
 
             my $target_name =
                 $parallel_job->{PARALLEL_WITH};
 
             die "Parallel job '$job_name' references "
                 . "unknown job '$target_name'\n"
-                unless exists $job_index{$target_name};
+                unless exists
+                $job_index{$target_name};
 
             my $target_index =
                 $job_index{$target_name};
@@ -598,9 +1245,9 @@ sub run_parallel_scenario {
         }
     }
 
-    # --------------------------------------------------------
-    # Print request
-    # --------------------------------------------------------
+    #
+    # Print
+    #
 
     print "\n";
     print "============================================================\n";
@@ -609,37 +1256,47 @@ sub run_parallel_scenario {
 
     print "\nCommand parameters:\n";
 
-    for my $arg (@command[5 .. $#command]) {
+    for my $arg (
+        @command[5 .. $#command]
+    ) {
+
         print "  $arg\n";
     }
 
-    # --------------------------------------------------------
+    #
     # Submit
-    # --------------------------------------------------------
+    #
 
     print "\nStarting parallel jobs...\n";
 
-    my $response = capture_command(@command);
+    my $response =
+        capture_command(
+            @command
+        );
 
     print "\nopenQA response:\n";
     print $response;
 
-    my $data = decode_json($response);
+    my $data =
+        decode_json($response);
 
     die "openQA response does not contain job IDs\n"
         unless exists $data->{ids}
         && ref($data->{ids}) eq 'HASH';
 
-    # --------------------------------------------------------
-    # Save IDs
-    # --------------------------------------------------------
+    #
+    # IDs
+    #
 
     my %job_ids;
 
-    for my $index (keys %{$data->{ids}}) {
+    for my $index (
+        keys %{$data->{ids}}
+    ) {
 
         die "Invalid job index returned by openQA: $index\n"
-            unless exists $parallel_jobs[$index];
+            unless exists
+            $parallel_jobs[$index];
 
         my $job_name =
             $parallel_jobs[$index]->{name};
@@ -647,27 +1304,32 @@ sub run_parallel_scenario {
         my $job_id =
             $data->{ids}{$index};
 
-        $job_ids{$job_name} = $job_id;
+        $job_ids{$job_name} =
+            $job_id;
 
         print "  $job_name -> job $job_id\n";
     }
 
-    # --------------------------------------------------------
-    # Verify all jobs exist
-    # --------------------------------------------------------
+    #
+    # Verify IDs
+    #
 
-    for my $index (0 .. $#parallel_jobs) {
+    for my $index (
+        0 .. $#parallel_jobs
+    ) {
 
         my $job_name =
             $parallel_jobs[$index]->{name};
 
-        die "openQA did not return job ID for '$job_name'\n"
-            unless exists $job_ids{$job_name};
+        die "openQA did not return job ID for "
+            . "'$job_name'\n"
+            unless exists
+            $job_ids{$job_name};
     }
 
-    # --------------------------------------------------------
+    #
     # Wait
-    # --------------------------------------------------------
+    #
 
     my %job_results;
 
@@ -676,21 +1338,30 @@ sub run_parallel_scenario {
     print "Waiting for parallel jobs\n";
     print "============================================================\n";
 
-    for my $parallel_job (@parallel_jobs) {
+    for my $parallel_job (
+        @parallel_jobs
+    ) {
 
-        my $job_name = $parallel_job->{name};
-        my $job_id   = $job_ids{$job_name};
+        my $job_name =
+            $parallel_job->{name};
+
+        my $job_id =
+            $job_ids{$job_name};
 
         print "\n";
         print "Waiting for job '$job_name' "
             . "(ID $job_id)...\n";
 
-        wait_for_job($job_id);
+        wait_for_job(
+            $job_id
+        );
 
-        my $job_data = get_job($job_id);
+        my $job_data =
+            get_job($job_id);
 
         my $job_state =
-            $job_data->{job}->{state} // 'unknown';
+            $job_data->{job}->{state}
+            // 'unknown';
 
         my $job_result =
             $job_data->{job}->{result};
@@ -711,9 +1382,9 @@ sub run_parallel_scenario {
             . "\n";
     }
 
-    # --------------------------------------------------------
+    #
     # Results
-    # --------------------------------------------------------
+    #
 
     print "\n";
     print "============================================================\n";
@@ -722,9 +1393,12 @@ sub run_parallel_scenario {
 
     my $failed = 0;
 
-    for my $parallel_job (@parallel_jobs) {
+    for my $parallel_job (
+        @parallel_jobs
+    ) {
 
-        my $job_name = $parallel_job->{name};
+        my $job_name =
+            $parallel_job->{name};
 
         my $job_id =
             $job_results{$job_name}->{id};
@@ -732,7 +1406,10 @@ sub run_parallel_scenario {
         my $job_result =
             $job_results{$job_name}->{result};
 
-        if (defined $job_result && $job_result eq 'passed') {
+        if (
+            defined $job_result
+            && $job_result eq 'passed'
+        ) {
 
             print "  $job_name "
                 . "(job $job_id): passed\n";
@@ -773,13 +1450,16 @@ sub run_parallel_scenario {
 sub expand_variables {
     my ($value, $job) = @_;
 
-    return $value unless defined $value;
+    return $value
+        unless defined $value;
 
-    $value =~ s/%([A-Z0-9_]+)%/
+    $value =~ s{
+        %([A-Z0-9_]+)%
+    }{
         exists $job->{$1}
             ? $job->{$1}
             : "%$1%"
-    /ge;
+    }gex;
 
     return $value;
 }
@@ -795,15 +1475,20 @@ sub wait_for_job {
 
     while (1) {
 
-        my $job_data = get_job($job_id);
+        my $job_data =
+            get_job($job_id);
 
         my $state =
-            $job_data->{job}->{state} // 'unknown';
+            $job_data->{job}->{state}
+            // 'unknown';
 
         my $result =
             $job_data->{job}->{result};
 
-        if (defined $result && length $result) {
+        if (
+            defined $result
+            && length $result
+        ) {
 
             print "  Job $job_id: "
                 . "state=$state "
@@ -816,7 +1501,8 @@ sub wait_for_job {
                 . "result=none\n";
         }
 
-        last if $state eq 'done';
+        last
+            if $state eq 'done';
 
         sleep $opt{poll};
     }
@@ -836,9 +1522,13 @@ sub get_job {
     );
 
     my $response =
-        capture_command(@command);
+        capture_command(
+            @command
+        );
 
-    return decode_json($response);
+    return decode_json(
+        $response
+    );
 }
 
 # ============================================================
@@ -853,7 +1543,8 @@ sub capture_command {
 
     local $/;
 
-    my $output = <$fh>;
+    my $output =
+        <$fh>;
 
     close $fh;
 
@@ -870,7 +1561,8 @@ sub capture_command {
         );
     }
 
-    my $exit_code = $? >> 8;
+    my $exit_code =
+        $? >> 8;
 
     if ($exit_code != 0) {
 
@@ -895,6 +1587,21 @@ sub require_option {
 }
 
 # ============================================================
+# Print job parameters
+# ============================================================
+
+sub print_job_parameters {
+    my ($job) = @_;
+
+    for my $key (
+        sort keys %{$job}
+    ) {
+
+        print "  $key=$job->{$key}\n";
+    }
+}
+
+# ============================================================
 # Usage
 # ============================================================
 
@@ -904,22 +1611,36 @@ Usage:
 
   $0 <scenario> [options]
 
-Scenarios:
+Scenario types:
 
-  create-base-image
-      Create base HDD image from ISO.
+  test
+      Run a normal test scenario.
 
-  smoke
-      Run smoke tests using an existing HDD.
+  image
+      Create and publish an HDD image.
 
-  regression
-      Run regression tests using an existing HDD.
+  parallel
+      Run multiple jobs in parallel.
 
   verify
-      Create base image, then run smoke and regression.
+      Run a complete dependency graph consisting of
+      image, test and parallel stages.
 
-  network
-      Run server/client tests in parallel.
+VERIFY supports:
+
+  START_AFTER_TEST
+      Start a stage after another stage.
+
+      START_AFTER_TEST: stage-name
+
+      or:
+
+      START_AFTER_TEST:
+        - stage-one
+        - stage-two
+
+  PARALLEL_WITH
+      Connect jobs inside a parallel scenario.
 
 Required options:
 

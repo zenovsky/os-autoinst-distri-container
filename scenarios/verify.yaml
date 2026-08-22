@@ -1,0 +1,18 @@
+name: verify
+type: verify
+
+stages:
+
+  - name: create-base-image
+    type: image
+    scenario: create-base-image
+
+  - name: smoke
+    type: test
+    scenario: smoke
+    START_AFTER_TEST: base-image
+
+  - name: network
+    type: parallel
+    scenario: network
+    START_AFTER_TEST: base-image
