@@ -4,6 +4,8 @@ description: >
 vars:
     HDDSIZEGB: "20"
     PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+    QEMUCPU: "host" 
+    QEMUCPUS: "2"
 schedule:
     - tests/installation/kickstart_install.pm
     - tests/system/first_boot.pm
