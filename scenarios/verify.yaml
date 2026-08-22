@@ -10,9 +10,9 @@ stages:
   - name: smoke
     type: test
     scenario: smoke
-    START_AFTER_TEST: base-image
+    START_AFTER_TEST: create-base-image
 
   - name: network
     type: parallel
     scenario: network
-    START_AFTER_TEST: base-image
+    START_AFTER_TEST: create-base-image
