@@ -1,0 +1,5 @@
+name: network
+
+schedule:
+  - tests/system/first_boot.pm
+  - tests/network/client.pm

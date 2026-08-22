@@ -1,0 +1,5 @@
+name: create-base-image
+
+schedule:
+  - tests/installation/kickstart_install.pm
+  - installation/first_boot

@@ -1,14 +1,54 @@
----
 products:
-  example:
-    distri: "example"
-    flavor: "DVD"
-    arch: "x86_64"
-    version: '0'
+  almalinux-10.2:
+    distri: AlmaLinux
+    flavor: Minimal
+    version: "10.2"
+    arch: x86_64
+
 machines:
   64bit:
-    backend: "qemu"
+    backend: qemu
+    settings:
+      QEMUCPU: host
+      QEMUCPUS: "2"
+
+.common: &common
+  product: almalinux-10.2
+  machine: 64bit
+
 job_templates:
-  simple_boot:
-    product: "example"
-    machine: "64bit"
+
+  create-base-image:
+    <<: *common
+    settings:
+      HDDSIZEGB: "20"
+      PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+      YAML_SCHEDULE: schedule/create-base-image.yaml
+
+  smoke:
+    <<: *common
+    settings:
+      OS_NAME: AlmaLinux
+      BOOT_HDD_IMAGE: "1"
+      HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+      YAML_SCHEDULE: schedule/smoke.yaml
+      START_AFTER_TEST: create-base-image
+
+  network_server:
+    <<: *common
+    settings:
+      BOOT_HDD_IMAGE: "1"
+      HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+      NICTYPE: 	tap
+      YAML_SCHEDULE: schedule/network_server.yaml
+      START_AFTER_TEST: create-base-ikmage
+
+  network_client:
+    <<: *common
+    settings:
+      BOOT_HDD_IMAGE: "1"
+      HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+      NICTYPE: 	tap
+      YAML_SCHEDULE: schedule/network_client.yaml
+      START_AFTER_TEST: create-base-image
+      PARALLEL_WITH: network_server

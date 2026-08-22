@@ -1,0 +1,15 @@
+name: smoke
+
+schedule:
+  - tests/system/first_boot.pm
+  - tests/system/os_release.pm
+  - tests/system/kernel.pm
+  - tests/system/systemd.pm
+  - tests/system/hostname.pm
+  - tests/system/filesystem.pm
+  - tests/system/users.pm
+  - tests/system/groups.pm
+  - tests/system/network.pm
+  - tests/system/packages.pm
+  - tests/system/services.pm
+  - tests/system/poweroff.pm

@@ -1,0 +1,5 @@
+name: network_server
+
+schedule:
+  - tests/system/first_boot.pm
+  - tests/network/server.pm
