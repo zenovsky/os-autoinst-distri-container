@@ -64,7 +64,7 @@ sub _load {
         unless $type eq 'test'
             || $type eq 'image'
             || $type eq 'parallel'
-            || $type eq 'verify';
+            || $type eq 'regression';
 
     #
     # Validate variables
@@ -161,12 +161,12 @@ sub _load {
     }
 
     #
-    # VERIFY
+    # REGRESSION
     #
 
-    elsif ($type eq 'verify') {
+    elsif ($type eq 'regression') {
 
-        $self->_validate_verify_scenario(
+        $self->_validate_regression_scenario(
             $scenario,
             $file,
             $seen
@@ -242,9 +242,9 @@ sub _load {
             && @{$scenario->{jobs}};
     }
 
-    elsif ($type eq 'verify') {
+    elsif ($type eq 'regression') {
 
-        die "Verify scenario contains no stages: $file\n"
+        die "Regression scenario contains no stages: $file\n"
             unless exists $scenario->{stages}
             && ref($scenario->{stages}) eq 'ARRAY'
             && @{$scenario->{stages}};
@@ -468,20 +468,20 @@ sub _validate_parallel_scenario {
 
 #
 # ------------------------------------------------------------
-# VERIFY
+# REGRESSION
 # ------------------------------------------------------------
 #
 
-sub _validate_verify_scenario {
+sub _validate_regression_scenario {
     my ($self, $scenario, $file, $seen) = @_;
 
-    die "Verify scenario must contain 'stages': $file\n"
+    die "Regression scenario must contain 'stages': $file\n"
         unless exists $scenario->{stages};
 
     die "'stages' must be an array: $file\n"
         unless ref($scenario->{stages}) eq 'ARRAY';
 
-    die "Verify scenario contains no stages: $file\n"
+    die "Regression scenario contains no stages: $file\n"
         unless @{$scenario->{stages}};
 
     my %stage_names;
@@ -490,13 +490,13 @@ sub _validate_verify_scenario {
         @{$scenario->{stages}}
     ) {
 
-        die "Verify stage must be a mapping: $file\n"
+        die "Regression stage must be a mapping: $file\n"
             unless ref($stage) eq 'HASH';
 
-        die "Verify stage must contain 'name': $file\n"
+        die "Regression stage must contain 'name': $file\n"
             unless exists $stage->{name};
 
-        die "Verify stage name must be a non-empty string: $file\n"
+        die "Regression stage name must be a non-empty string: $file\n"
             unless defined $stage->{name}
             && !ref($stage->{name})
             && length $stage->{name};
@@ -504,28 +504,28 @@ sub _validate_verify_scenario {
         my $stage_name =
             $stage->{name};
 
-        die "Duplicate verify stage name "
+        die "Duplicate regression stage name "
             . "'$stage_name': $file\n"
             if $stage_names{$stage_name}++;
 
-        die "Verify stage '$stage_name' must contain "
+        die "Regression stage '$stage_name' must contain "
             . "'type': $file\n"
             unless exists $stage->{type};
 
         my $type =
             $stage->{type};
 
-        die "Verify stage '$stage_name' has unsupported "
+        die "Regression stage '$stage_name' has unsupported "
             . "type '$type': $file\n"
             unless $type eq 'test'
                 || $type eq 'image'
                 || $type eq 'parallel';
 
-        die "Verify stage '$stage_name' must contain "
+        die "Regression stage '$stage_name' must contain "
             . "'scenario': $file\n"
             unless exists $stage->{scenario};
 
-        die "Verify stage '$stage_name' scenario must be "
+        die "Regression stage '$stage_name' scenario must be "
             . "a non-empty string: $file\n"
             unless defined $stage->{scenario}
             && !ref($stage->{scenario})
@@ -541,7 +541,7 @@ sub _validate_verify_scenario {
                 $seen
             );
 
-        die "Verify stage '$stage_name' expects type '$type' "
+        die "Regression stage '$stage_name' expects type '$type' "
             . "but scenario '$stage->{scenario}' has type "
             . "'$referenced->{type}': $file\n"
             unless $referenced->{type} eq $type;
@@ -557,13 +557,13 @@ sub _validate_verify_scenario {
 
             if (ref($value) eq 'ARRAY') {
 
-                die "START_AFTER_TEST for verify stage "
+                die "START_AFTER_TEST for regression stage "
                     . "'$stage_name' cannot be empty: $file\n"
                     unless @{$value};
 
                 for my $target (@{$value}) {
 
-                    die "START_AFTER_TEST for verify stage "
+                    die "START_AFTER_TEST for regression stage "
                         . "'$stage_name' must contain only "
                         . "non-empty strings: $file\n"
                         unless defined $target
@@ -573,7 +573,7 @@ sub _validate_verify_scenario {
             }
             else {
 
-                die "START_AFTER_TEST for verify stage "
+                die "START_AFTER_TEST for regression stage "
                     . "'$stage_name' must be a string or array: $file\n"
                     unless defined $value
                     && !ref($value)
@@ -588,10 +588,10 @@ sub _validate_verify_scenario {
         if (exists $stage->{PARALLEL_WITH}) {
 
             die "PARALLEL_WITH can only be used with "
-                . "parallel verify stages: $file\n"
+                . "parallel regression stages: $file\n"
                 unless $type eq 'parallel';
 
-            die "PARALLEL_WITH for verify stage "
+            die "PARALLEL_WITH for regression stage "
                 . "'$stage_name' must be a non-empty string: $file\n"
                 unless defined $stage->{PARALLEL_WITH}
                 && !ref($stage->{PARALLEL_WITH})
@@ -625,7 +625,7 @@ sub _validate_verify_scenario {
 
         for my $target (@targets) {
 
-            die "Verify stage '$stage->{name}' "
+            die "Regression stage '$stage->{name}' "
                 . "references unknown stage '$target': $file\n"
                 unless exists $stage_names{$target};
         }
