@@ -1,7 +1,0 @@
-name: kickstart installation
-
-type: test
-
-tests:
-  - tests/installation/kickstart_install.pm
-  - tests/system/first_boot.pm

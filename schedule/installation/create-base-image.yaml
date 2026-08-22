@@ -1,0 +1,9 @@
+name: create-base-image
+description: >
+    Build base qcow2 image via kickstart installation and first boot.
+vars:
+    HDDSIZEGB: "20"
+    PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
+schedule:
+    - installation/kickstart_install
+    - installation/first_boot
