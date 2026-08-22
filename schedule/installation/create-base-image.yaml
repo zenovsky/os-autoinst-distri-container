@@ -5,5 +5,5 @@ vars:
     HDDSIZEGB: "20"
     PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
 schedule:
-    - installation/kickstart_install
-    - installation/first_boot
+    - tests/installation/kickstart_install
+    - tests/installation/first_boot
