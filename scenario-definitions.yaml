@@ -1,5 +1,5 @@
 products:
-  almalinux-10.2:
+  almalinux-10.2-x86_64:
     distri: AlmaLinux
     flavor: Minimal
     version: "10.2"
@@ -12,21 +12,14 @@ machines:
       QEMUCPU: host
       QEMUCPUS: "2"
 
-.common: &common
-  product: almalinux-10.2
-  machine: 64bit
-
-job_templates:
-
+test_suites:
   create-base-image:
-    <<: *common
     settings:
       HDDSIZEGB: "20"
       PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
       YAML_SCHEDULE: schedule/create-base-image.yaml
 
   smoke:
-    <<: *common
     settings:
       OS_NAME: AlmaLinux
       BOOT_HDD_IMAGE: "1"
@@ -35,20 +28,26 @@ job_templates:
       START_AFTER_TEST: create-base-image
 
   network_server:
-    <<: *common
     settings:
       BOOT_HDD_IMAGE: "1"
       HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
-      NICTYPE: 	tap
+      NICTYPE: tap
       YAML_SCHEDULE: schedule/network_server.yaml
-      START_AFTER_TEST: create-base-ikmage
+      START_AFTER_TEST: create-base-image
 
   network_client:
-    <<: *common
     settings:
       BOOT_HDD_IMAGE: "1"
       HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
-      NICTYPE: 	tap
+      NICTYPE: tap
       YAML_SCHEDULE: schedule/network_client.yaml
       START_AFTER_TEST: create-base-image
       PARALLEL_WITH: network_server
+
+scenarios:
+  x86_64:
+    64bit:
+      - create-base-image
+      - smoke
+      - network_server
+      - network_client
