@@ -35,26 +35,36 @@ sub openqa_params {
     my $scenario = $self->load($scenario_name);
 
     my %params;
+    my %stage_id;
+
+    for my $i (0 .. $#{$scenario->{stages}}) {
+        my $stage = $scenario->{stages}[$i];
+
+        $stage_id{$stage->{name}} = $i;
+
+        $params{"TEST:$i"} = $stage->{scenario};
+    }
 
     for my $stage (@{$scenario->{stages}}) {
         my $name = $stage->{name};
-        my $type = $stage->{type};
-        my $test = $stage->{scenario} // $name;
-
-        $params{"TEST:$name"} = $test;
 
         if (defined $stage->{START_AFTER_TEST}) {
-            $params{"_START_AFTER:$name"} =
-                $stage->{START_AFTER_TEST};
-        }
-
-        if ($type eq 'parallel') {
             my $parent = $stage->{START_AFTER_TEST};
 
-            die "Parallel stage '$name' requires START_AFTER_TEST\n"
-                unless defined $parent;
+            die "Unknown START_AFTER_TEST stage '$parent'\n"
+                unless exists $stage_id{$parent};
 
-            $params{"_PARALLEL:$name"} = $parent;
+            $params{"_START_AFTER:$stage_id{$name}"} =
+                $stage_id{$parent};
+        }
+
+        if ($stage->{type} eq 'parallel'
+            && defined $stage->{START_AFTER_TEST}) {
+
+            my $parent = $stage->{START_AFTER_TEST};
+
+            $params{"_PARALLEL:$stage_id{$name}"} =
+                $stage_id{$parent};
         }
     }
 
