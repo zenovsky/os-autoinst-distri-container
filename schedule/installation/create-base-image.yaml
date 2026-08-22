@@ -6,4 +6,4 @@ vars:
     PUBLISH_HDD_1: "%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2"
 schedule:
     - tests/installation/kickstart_install.pm
-    - tests/installation/first_boot.pm
+    - tests/system/first_boot.pm
