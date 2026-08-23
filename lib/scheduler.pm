@@ -35,12 +35,31 @@ sub load_yaml_schedule {
 
 # Sets job vars from the YAML file, but never overrides a value already
 # passed to the job explicitly (e.g. via CLI/API settings).
+# Sets job vars from the YAML file, but never overrides a value already
+# passed to the job explicitly (e.g. via CLI/API settings).
 sub _apply_vars {
     my ($vars) = @_;
+
+    # first pass: set literal values
     for my $key (keys %$vars) {
         set_var($key, $vars->{$key}) unless defined get_var($key);
     }
+
+    # second pass: expand %NAME% placeholders now that all vars/settings are visible
+    for my $key (keys %$vars) {
+        my $value = get_var($key);
+        next unless defined $value && $value =~ /%\w+%/;
+        set_var($key, _expand_vars_string($value));
+    }
     return;
+}
+
+# Replaces %NAME% occurrences with the current value of job setting NAME.
+# Leaves unknown placeholders untouched instead of silently emptying them
+sub _expand_vars_string {
+    my ($value) = @_;
+    $value =~ s/%(\w+)%/ defined get_var($1) ? get_var($1) : "%$1%" /ge;
+    return $value;
 }
 
 # Walks a `schedule` list, replacing '{{placeholder}}' entries with the
