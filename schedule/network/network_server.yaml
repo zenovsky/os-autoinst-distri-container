@@ -1,5 +1,6 @@
-name: network_server
-
+name: network-server
+description: >
+    Checking client-server network connectivity.
 schedule:
   - tests/system/first_boot.pm
   - tests/network/server.pm

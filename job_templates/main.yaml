@@ -1,0 +1,40 @@
+defaults:
+  x86_64:
+    machine: 64bit
+    priority: 50
+
+products:
+  os-autoinst-distri-container-10.2-Minimal-x86_64:
+    distri: os-autoinst-distri-container
+    flavor: Minimal
+    version: '10.2'
+
+scenarios:
+  x86_64:
+    os-autoinst-distri-container-10.2-Minimal-x86_64:
+      - create-base-image:
+          settings:
+            YAML_SCHEDULE: schedule/installation/create-base-image.yaml
+            QEMUCPU: host
+            QEMUCPUS: '2'
+            HDDSIZEGB: '20'
+            PUBLISH_HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+
+      - network-server:
+          settings:
+            YAML_SCHEDULE: schedule/network/network-server.yaml
+            NICTYPE: tap
+            QEMUCPU: host
+            QEMUCPUS: '2'
+            BOOT_HDD_IMAGE: '1'
+            HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+
+      - network:
+          settings:
+            YAML_SCHEDULE: schedule/network/network-client.yaml
+            NICTYPE: tap
+            QEMUCPU: host
+            QEMUCPUS: '2'
+            BOOT_HDD_IMAGE: '1'
+            HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+            PARALLEL_WITH: network-server      
