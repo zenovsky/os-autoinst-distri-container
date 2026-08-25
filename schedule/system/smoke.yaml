@@ -1,5 +1,7 @@
-name: smoke
 
+name: smoke
+description: >
+    Basic smoke tests of the image.
 schedule:
   - tests/system/first_boot.pm
   - tests/system/os_release.pm
