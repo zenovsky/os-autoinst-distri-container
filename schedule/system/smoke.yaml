@@ -1,4 +1,3 @@
-
 name: smoke
 description: >
     Basic smoke tests of the image.
