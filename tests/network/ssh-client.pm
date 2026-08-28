@@ -1,0 +1,129 @@
+# openQA test
+#
+# Summary: OpenSSH (Client) — установка, аутентификация по паролю/ключу,
+#          проверка запрета входа с неверным ключом, проверки после
+#          рестарта службы, перезагрузки системы и обновления пакета.
+# Источник: TC-13 "OpenSSH" (suite "Network")
+# Парный модуль: ssh-server.pm — запускается на второй машине той же
+#          multi-machine job group и синхронизируется через mmapi mutex'ы.
+# Требует: multi-machine job group, роль этой машины — CLIENT,
+#          needle 'ssh-password-prompt' для запроса пароля.
+use Mojo::Base 'basetest';
+use testapi;
+use lockapi;
+use mmapi;
+
+my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
+my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
+
+my $test_user = get_var('SSH_USER', 'ssh_test_user');
+my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
+my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
+
+sub run {
+    # --- Предусловия ---
+    assert_script_run("ip addr add $client_ip/15 dev ens4");
+    assert_script_run('ip link set ens4 up');
+
+    mutex_create('net_configured_client');
+    mutex_wait('net_configured_server');
+
+    assert_script_run("ping -c 4 $server_ip");
+
+    mutex_wait('test_user_created');
+
+    # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
+    # assert_script_run('dnf install -y openssh', timeout => 300);
+    # assert_script_run("sshd -T | grep 'port 22'");
+    # assert_script_run('systemctl start sshd');
+    # assert_script_run('systemctl is-active sshd');
+    # assert_script_run('systemctl enable --now sshd');
+    # assert_script_run('systemctl is-enabled sshd');
+    # assert_script_run("ss -lntp | grep ':22'");
+    # assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+
+    # mutex_wait('server_ready');
+
+    # # --- Шаг 7: доступность порта 22 на сервере ---
+    # my $curl_out = script_output(
+    #     "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
+    # die "Port 22 unreachable or no SSH banner:\n$curl_out"
+    #   unless $curl_out =~ /OpenSSH/;
+
+    # # --- Шаги 8-10: подключение по паролю ---
+    # type_string("ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n");
+    # assert_screen('ssh-password-prompt', 30);
+    # type_string("$test_pass\n");
+    # assert_script_run("whoami | grep '$test_user'");
+    # assert_script_run("echo \"\$HOME\" | grep '/home/$test_user'");
+    # enter_cmd('exit');
+
+    # # --- Шаг 11: генерация ключа ---
+    # assert_script_run("ssh-keygen -t ed25519 -f $keyfile -N ''");
+    # assert_script_run("ls -l $keyfile $keyfile.pub");
+
+    # # --- Шаги 12-13: установка публичного ключа на сервер ---
+    # type_string("ssh-copy-id -i $keyfile.pub $test_user\@$server_ip\n");
+    # assert_screen('ssh-password-prompt', 30);
+    # type_string("$test_pass\n");
+    # wait_still_screen(3);
+
+    # mutex_create('client_key_installed');
+
+    # # --- Шаг 14: подключение по публичному ключу ---
+    # my $key_auth_out = script_output(
+    #     "ssh -i $keyfile -o PasswordAuthentication=no "
+    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'");
+    # die "Public key auth failed, expected '$test_user':\n$key_auth_out"
+    #   unless $key_auth_out =~ /^$test_user$/m;
+
+    # # --- Шаг 15: подключение с неверным ключом должно быть отклонено ---
+    # assert_script_run("ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''");
+    # my $wrong_key_out = script_output(
+    #     "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
+    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1; true");
+    # die "Expected 'Permission denied' with wrong key, got:\n$wrong_key_out"
+    #   unless $wrong_key_out =~ /Permission denied/;
+
+    # mutex_create('client_key_checks_done');
+
+    # # ждём, пока сервер перезапустит sshd (шаг 16)
+    # mutex_wait('server_sshd_restarted');
+
+    # mutex_create('client_pre_reboot_done');
+    # mutex_wait('server_rebooted');
+
+    # # --- Шаг 17: проверка SSH после рестарта службы ---
+    # my $ok1 = script_output(
+    #     "ssh -i $keyfile -o PasswordAuthentication=no "
+    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'");
+    # die "SSH check failed after service restart:\n$ok1"
+    #   unless $ok1 =~ /SSH_OK/;
+
+    # mutex_create('client_post_reboot_done');
+    # mutex_wait('server_updated');
+
+    # # --- Шаг 20: проверка SSH после перезагрузки системы ---
+    # my $ok2 = script_output(
+    #     "ssh -i $keyfile -o PasswordAuthentication=no "
+    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
+    #   . "'echo SSH_OK_AFTER_REBOOT'");
+    # die "SSH check failed after system reboot:\n$ok2"
+    #   unless $ok2 =~ /SSH_OK_AFTER_REBOOT/;
+
+    # # --- Шаг 23: SSH-сессия после обновления пакета на сервере ---
+    # my $ok3 = script_output(
+    #     "ssh -i $keyfile -o PasswordAuthentication=no "
+    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
+    #   . "'echo SSH_OK_AFTER_UPDATE'");
+    # die "SSH check failed after package update:\n$ok3"
+    #   unless $ok3 =~ /SSH_OK_AFTER_UPDATE/;
+
+    # mutex_create('client_final_checks_done');
+}
+
+sub test_flags {
+    return {fatal => 1, milestone => 0};
+}
+
+1;

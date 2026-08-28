@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() { echo "Usage: $0 --group-id <id> [--file <path>]"; exit 1; }
+
+GROUP_ID=""
+FILE="job_templates/main.yaml"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --group-id) GROUP_ID="$2"; shift 2 ;;
+    --file) FILE="$2"; shift 2 ;;
+    *) usage ;;
+  esac
+done
+[[ -z "$GROUP_ID" ]] && usage
+[[ -f "$FILE" ]] || { echo "File not found: $FILE"; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+names=$(python3 - "$FILE" <<'PY'
+import sys, yaml
+with open(sys.argv[1]) as f:
+    data = yaml.safe_load(f) or {}
+names = set()
+for products in (data.get('scenarios') or {}).values():
+    for items in products.values():
+        for item in items:
+            names.update(item.keys() if isinstance(item, dict) else [item])
+print('\n'.join(sorted(names)))
+PY
+)
+
+while IFS= read -r name; do
+  [[ -z "$name" ]] && continue
+  "$SCRIPT_DIR/openqa-test-suite-reg" --name "$name"
+done <<< "$names"
+
+"$SCRIPT_DIR/openqa-templates-apply" --group-id "$GROUP_ID" --file "$FILE"

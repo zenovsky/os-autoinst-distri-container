@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() { echo "Usage: $0 --group-id <id> [--file <path>]"; exit 1; }
+
+GROUP_ID=""
+FILE="job_templates/main.yaml"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --group-id) GROUP_ID="$2"; shift 2 ;;
+    --file) FILE="$2"; shift 2 ;;
+    *) usage ;;
+  esac
+done
+[[ -z "$GROUP_ID" ]] && usage
+[[ -f "$FILE" ]] || { echo "File not found: $FILE"; exit 1; }
+
+reference=$(openqa-cli api -a 'Accept: application/yaml' \
+  job_templates_scheduling/"$GROUP_ID" 2>/dev/null || true)
+
+echo "[apply] $FILE -> job group $GROUP_ID"
+
+if [[ -n "$reference" ]]; then
+  openqa-cli api -X POST job_templates_scheduling/"$GROUP_ID" \
+    schema=JobTemplates-01.yaml \
+    template="$(cat "$FILE")" \
+    reference="$reference"
+else
+  openqa-cli api -X POST job_templates_scheduling/"$GROUP_ID" \
+    schema=JobTemplates-01.yaml \
+    template="$(cat "$FILE")"
+fi
