@@ -8,5 +8,5 @@ vars:
     SSH_USER_PASSWORD:
 schedule:
   - tests/system/first_boot.pm
-  - tests/network/ssh-server.pm
+  - tests/network/ssh_server.pm
 

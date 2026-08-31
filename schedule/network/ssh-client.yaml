@@ -9,5 +9,5 @@ vars:
     SSH_KEY_PATH:    
 schedule:
   - tests/system/first_boot.pm
-  - tests/network/ssh-client.pm
+  - tests/network/ssh_client.pm
 
