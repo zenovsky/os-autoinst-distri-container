@@ -23,9 +23,6 @@ sub run {
     assert_script_run('ip link set ens4 up');
 
     mutex_create('net_configured_server');
-
-    wait_for_children;
-    
     mutex_wait('net_configured_client');
 
     assert_script_run("ping -c 4 $client_ip");
