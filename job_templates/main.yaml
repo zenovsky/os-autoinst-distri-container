@@ -51,7 +51,7 @@ scenarios:
 
       - openssh-server:
           settings:
-            YAML_SCHEDULE: schedule/network/network-server.yaml
+            YAML_SCHEDULE: schedule/network/ssh-server.yaml
             NICTYPE: tap
             QEMUCPU: host
             QEMUCPUS: '2'
@@ -60,7 +60,7 @@ scenarios:
 
       - openssh:
           settings:
-            YAML_SCHEDULE: schedule/network/network-client.yaml
+            YAML_SCHEDULE: schedule/network/ssh-client.yaml
             NICTYPE: tap
             QEMUCPU: host
             QEMUCPUS: '2'
