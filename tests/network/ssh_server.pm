@@ -25,8 +25,6 @@ sub run {
     mutex_create('net_configured_server');
     mutex_wait('net_configured_client');
 
-    barrier_wait('network_ready');
-    
     assert_script_run("ping -c 4 $client_ip");
 
     assert_script_run("useradd -m -s /bin/bash $test_user");

@@ -28,7 +28,6 @@ sub run {
     mutex_create('net_configured_client');
     mutex_wait('net_configured_server');
 
-    barrier_wait('network_ready');
     assert_script_run("ping -c 4 $server_ip");
 
     mutex_wait('test_user_created');
