@@ -32,18 +32,14 @@ sub run {
 
     # mutex_wait('test_user_created');
     assert_script_run("ip addr add $client_ip/15 dev ens4");
-    record_info('CLIENT', "IP configured: $client_ip");
+    assert_script_run("ip link set ens4 up");
 
-    assert_script_run('ip link set ens4 up');
-    record_info('CLIENT', 'ens4 is UP');
+    mutex_create('client_network_ready');
 
-    barrier_wait('network_configured');
-
-    record_info('CLIENT', 'both machines have network configured');
+    mutex_wait('server_network_ready');
+    mutex_unlock('server_network_ready');
 
     assert_script_run("ping -c 4 $server_ip");
-
-    barrier_wait('test_user_created');
     # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
     # assert_script_run('dnf install -y openssh', timeout => 300);
     # assert_script_run("sshd -T | grep 'port 22'");
