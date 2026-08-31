@@ -18,27 +18,21 @@ my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
 sub run {
-    # # --- Предусловия ---
-    # assert_script_run("ip addr add $server_ip/15 dev ens4");
-    # assert_script_run('ip link set ens4 up');
-
-    # mutex_create('net_configured_server');
-    # mutex_wait('net_configured_client');
-
-    # assert_script_run("ping -c 4 $client_ip");
-
-    # assert_script_run("useradd -m -s /bin/bash $test_user");
-    # assert_script_run("echo '$test_user:$test_pass' | chpasswd");
-    # mutex_create('test_user_created');
+    # --- Предусловия ---
     assert_script_run("ip addr add $server_ip/15 dev ens4");
-    assert_script_run("ip link set ens4 up");
+    assert_script_run('ip link set ens4 up');
 
-    mutex_create('server_network_ready');
+    mutex_create('net_configured_server');
+    
+    wait_for_children;
 
-    mutex_wait('client_network_ready');
-    mutex_unlock('client_network_ready');
+    mutex_wait('net_configured_client');
 
     assert_script_run("ping -c 4 $client_ip");
+
+    assert_script_run("useradd -m -s /bin/bash $test_user");
+    assert_script_run("echo '$test_user:$test_pass' | chpasswd");
+    mutex_create('test_user_created');
 
     # # --- Шаг 1: установка пакета ---
     # assert_script_run('dnf install -y openssh', timeout => 300);
