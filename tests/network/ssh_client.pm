@@ -21,17 +21,30 @@ my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
-    # --- Предусловия ---
+    # # --- Предусловия ---
+    # assert_script_run("ip addr add $client_ip/15 dev ens4");
+    # assert_script_run('ip link set ens4 up');
+
+    # mutex_create('net_configured_client');
+    # mutex_wait('net_configured_server');
+
+    # assert_script_run("ping -c 4 $server_ip");
+
+    # mutex_wait('test_user_created');
     assert_script_run("ip addr add $client_ip/15 dev ens4");
+    record_info('CLIENT', "IP configured: $client_ip");
+
     assert_script_run('ip link set ens4 up');
+    record_info('CLIENT', 'ens4 is UP');
 
     mutex_create('net_configured_client');
+    record_info('CLIENT', 'created net_configured_client');
+
     mutex_wait('net_configured_server');
+    record_info('CLIENT', 'server network is configured');
 
     assert_script_run("ping -c 4 $server_ip");
-
-    mutex_wait('test_user_created');
-
+    record_info('CLIENT', 'ping completed');
     # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
     # assert_script_run('dnf install -y openssh', timeout => 300);
     # assert_script_run("sshd -T | grep 'port 22'");
