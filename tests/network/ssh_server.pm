@@ -36,14 +36,16 @@ sub run {
     assert_script_run('ip link set ens4 up');
     record_info('SERVER', 'ens4 is UP');
 
-    mutex_create('net_configured_server');
-    record_info('SERVER', 'created net_configured_server');
+    barrier_wait('network_configured');
 
-    mutex_wait('net_configured_client');
-    record_info('SERVER', 'client network is configured');
+    record_info('SERVER', 'both machines have network configured');
 
     assert_script_run("ping -c 4 $client_ip");
-    record_info('SERVER', 'ping completed');
+
+    assert_script_run("useradd -m -s /bin/bash $test_user");
+    assert_script_run("echo '$test_user:$test_pass' | chpasswd");
+
+    barrier_wait('test_user_created');
 
     # # --- Шаг 1: установка пакета ---
     # assert_script_run('dnf install -y openssh', timeout => 300);
