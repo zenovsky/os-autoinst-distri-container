@@ -20,6 +20,7 @@ my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
+    assert_script_run('cat /etc/resolv.conf');
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
     assert_script_run('ip route add default via 172.16.2.2 dev ens4');
