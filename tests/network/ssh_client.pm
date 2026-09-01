@@ -22,6 +22,7 @@ sub run {
     # --- Preconditions ---
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
+    
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $server_ip");
     barrier_wait('user_ready');

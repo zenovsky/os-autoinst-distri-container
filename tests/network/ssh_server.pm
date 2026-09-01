@@ -21,8 +21,11 @@ sub run {
     # --- Preconditions ---
     assert_script_run("ip addr add $server_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
+    
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
+    barrier_create('server_ready', 2);
+
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $client_ip");
     assert_script_run("useradd -m -s /bin/bash $test_user");
@@ -49,7 +52,6 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run("firewall-cmd --list-services | grep 'ssh'");
 
-    barrier_create('server_ready', 2);
     barrier_wait('server_ready');
     # mutex_create('server_ready');
 
