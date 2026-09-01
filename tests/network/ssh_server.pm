@@ -24,7 +24,7 @@ sub run {
 
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
-    barrier_create('server_ready', 2);
+    #barrier_create('server_ready', 2);
 
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $client_ip");
