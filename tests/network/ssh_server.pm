@@ -23,6 +23,8 @@ sub run {
     assert_script_run('ip link set ens4 up');
     assert_script_run('ip route add default via 172.16.2.2 dev ens4');
     assert_script_run('echo "nameserver 8.8.8.8" > /etc/resolv.conf');
+    assert_script_run 'getent hosts mirrors.almalinux.org';
+    assert_script_run 'getent hosts google.com';
 
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
