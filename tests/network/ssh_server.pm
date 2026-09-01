@@ -22,8 +22,8 @@ sub run {
     assert_script_run("ip addr add $server_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
 
-    barrier_create('net_ready', 5);
-    barrier_create('user_ready', 5);
+    barrier_create('net_ready', 2);
+    barrier_create('user_ready', 2);
     #barrier_create('server_ready', 2);
 
     barrier_wait('net_ready');
