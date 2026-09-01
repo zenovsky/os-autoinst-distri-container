@@ -21,31 +21,22 @@ my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
-    # # --- Предусловия ---
-    # assert_script_run("ip addr add $client_ip/15 dev ens4");
-    # assert_script_run('ip link set ens4 up');
-
-    # mutex_create('net_configured_client');
-    # mutex_wait('net_configured_server');
-
-    # assert_script_run("ping -c 4 $server_ip");
-
-    # mutex_wait('test_user_created');
+    # --- Предусловия ---
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
 
-    # Tell server that client network is ready
-    mutex_create('client_network_ready');
+    mutex_create('net_configured_client');
+    mutex_lock ('net_configured_server');
+    mutex_unlock ('net_configured_server');
 
-    # Wait until server network is ready
-    mutex_lock('server_network_ready');
-    mutex_unlock('server_network_ready');
+    #mutex_wait('net_configured_server');
 
     assert_script_run("ping -c 4 $server_ip");
 
-    # Wait until server creates test user
-    mutex_lock('test_user_created');
-    mutex_unlock('test_user_created');
+    #mutex_wait('test_user_created');
+    mutex_lock ('test_user_created');
+    mutex_unlock ('test_user_created');
+
 
     # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
     # assert_script_run('dnf install -y openssh', timeout => 300);
