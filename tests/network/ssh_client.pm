@@ -25,17 +25,14 @@ sub run {
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
 
-    mutex_create('net_configured_client');
-    mutex_lock ('net_configured_server');
-    mutex_unlock ('net_configured_server');
-
+    #mutex_create('net_configured_client');
     #mutex_wait('net_configured_server');
+    barrier_wait('net_ready');
 
     assert_script_run("ping -c 4 $server_ip");
 
     #mutex_wait('test_user_created');
-    mutex_lock ('test_user_created');
-    mutex_unlock ('test_user_created');
+    barrier_wait('user_ready');
 
 
     # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
