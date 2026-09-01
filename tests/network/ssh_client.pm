@@ -20,6 +20,7 @@ my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
+    assert_script_run("ping 8.8.8.8");
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
 
