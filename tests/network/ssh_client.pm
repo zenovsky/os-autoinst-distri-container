@@ -22,9 +22,10 @@ sub run {
     # --- Preconditions ---
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
-    assert_script_run ('ip link set ens4 mtu 1400');
     assert_script_run('ip route add default via 172.16.2.2 dev ens4');
     assert_script_run('echo "nameserver 8.8.8.8" > /etc/resolv.conf');
+    assert_script_run('echo "nameserver 1.1.1.1" >> /etc/resolv.conf');
+    assert_script_run('systemctl restart NetworkManager');
 
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $server_ip");
