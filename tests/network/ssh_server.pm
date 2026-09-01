@@ -1,11 +1,11 @@
 # openQA test
 #
-# Summary: OpenSSH (Server) — установка, конфигурация, рестарт службы,
-#          перезагрузка системы, обновление пакета.
-# Источник: TC-13 "OpenSSH" (suite "Network")
-# Парный модуль: ssh-client.pm — запускается на второй машине той же
-#          multi-machine job group и синхронизируется через mmapi mutex'ы.
-# Требует: multi-machine job group, роль этой машины — SERVER.
+# Summary: OpenSSH (Server) — installation, configuration, service restart,
+# system reboot, package update.
+# Source:
+# Paired module: ssh_client.pm — runs on a second machine in the same
+# job group:
+# TEST=openssh
 use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
@@ -18,44 +18,39 @@ my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
 sub run {
-    # --- Предусловия ---
+    # --- Preconditions ---
     assert_script_run("ip addr add $server_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
-
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
-
     barrier_wait('net_ready');
-    # mutex_create('net_configured_server');
-    # mutex_wait('net_configured_client');
-
     assert_script_run("ping -c 4 $client_ip");
-
     assert_script_run("useradd -m -s /bin/bash $test_user");
     assert_script_run("echo '$test_user:$test_pass' | chpasswd");
-    #mutex_create('test_user_created');
     barrier_wait('user_ready');
 
-    # # --- Шаг 1: установка пакета ---
-    # assert_script_run('dnf install -y openssh', timeout => 300);
+    # --- Step 1: Install the package ---
+    assert_script_run('dnf install -y openssh', timeout => 300);
 
-    # # --- Шаг 2: конфигурация sshd ---
-    # assert_script_run("sshd -T | grep 'port 22'");
+    # --- Step 2: sshd configuration ---
+    assert_script_run("sshd -T | grep 'port 22'");
 
-    # # --- Шаг 3: запуск службы ---
-    # assert_script_run('systemctl start sshd');
-    # assert_script_run('systemctl is-active sshd');
+    # --- Step 3: Start the service ---
+    assert_script_run('systemctl start sshd');
+    assert_script_run('systemctl is-active sshd');
 
-    # # --- Шаг 4: автозагрузка ---
-    # assert_script_run('systemctl enable --now sshd');
-    # assert_script_run('systemctl is-enabled sshd');
+    # --- Step 4: Autoload ---
+    assert_script_run('systemctl enable --now sshd');
+    assert_script_run('systemctl is-enabled sshd');
 
-    # # --- Шаг 5: listening port ---
-    # assert_script_run("ss -lntp | grep ':22'");
+    # --- Step 5: Listening port ---
+    assert_script_run("ss -lntp | grep ':22'");
 
-    # # --- Шаг 6: firewalld ---
-    # assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+    # --- Step 6: firewalld ---
+    assert_script_run("firewall-cmd --list-services | grep 'ssh'");
 
+    barrier_create('server_ready', 2);
+    barrier_wait('server_ready');
     # mutex_create('server_ready');
 
     # # ждём, пока клиент установит публичный ключ (шаги 11-13)

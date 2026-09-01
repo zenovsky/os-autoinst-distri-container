@@ -1,13 +1,11 @@
 # openQA test
-#
-# Summary: OpenSSH (Client) — установка, аутентификация по паролю/ключу,
-#          проверка запрета входа с неверным ключом, проверки после
-#          рестарта службы, перезагрузки системы и обновления пакета.
-# Источник: TC-13 "OpenSSH" (suite "Network")
-# Парный модуль: ssh-server.pm — запускается на второй машине той же
-#          multi-machine job group и синхронизируется через mmapi mutex'ы.
-# Требует: multi-machine job group, роль этой машины — CLIENT,
-#          needle 'ssh-password-prompt' для запроса пароля.
+# Summary: OpenSSH (Client) — installation, password/key authentication,
+# check for invalid key login restrictions, checks after
+# service restarts, system reboots, and package updates.
+# Source:
+# Paired module: ssh_server.pm — runs on a second machine in the same
+# job group:
+# TEST=openssh
 use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
@@ -21,30 +19,34 @@ my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
-    # --- Предусловия ---
+    # --- Preconditions ---
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
-
-    #mutex_create('net_configured_client');
-    #mutex_wait('net_configured_server');
     barrier_wait('net_ready');
-
     assert_script_run("ping -c 4 $server_ip");
-
-    #mutex_wait('test_user_created');
     barrier_wait('user_ready');
 
+    # --- Step 1: Install the package ---
+    assert_script_run('dnf install -y openssh', timeout => 300);
 
-    # # --- Шаги 1-6 идентичны серверным (пакет тоже ставится на клиенте) ---
-    # assert_script_run('dnf install -y openssh', timeout => 300);
-    # assert_script_run("sshd -T | grep 'port 22'");
-    # assert_script_run('systemctl start sshd');
-    # assert_script_run('systemctl is-active sshd');
-    # assert_script_run('systemctl enable --now sshd');
-    # assert_script_run('systemctl is-enabled sshd');
-    # assert_script_run("ss -lntp | grep ':22'");
-    # assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+    # --- Step 2: sshd configuration ---
+    assert_script_run("sshd -T | grep 'port 22'");
 
+    # --- Step 3: Start the service ---
+    assert_script_run('systemctl start sshd');
+    assert_script_run('systemctl is-active sshd');
+
+    # --- Step 4: Autoload ---
+    assert_script_run('systemctl enable --now sshd');
+    assert_script_run('systemctl is-enabled sshd');
+
+    # --- Step 5: Listening port ---
+    assert_script_run("ss -lntp | grep ':22'");
+
+    # --- Step 6: firewalld ---
+    assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+
+    barrier_wait('server_ready');
     # mutex_wait('server_ready');
 
     # # --- Шаг 7: доступность порта 22 на сервере ---
