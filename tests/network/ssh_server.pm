@@ -24,7 +24,6 @@ sub run {
 
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
-    barrier_create('package_ready', 2);
 
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $client_ip");
@@ -32,6 +31,7 @@ sub run {
     assert_script_run("echo '$test_user:$test_pass' | chpasswd");
     barrier_wait('user_ready');
 
+    barrier_create('package_ready', 2);
     # --- Step 1: Install the package ---
     assert_script_run('dnf install -y openssh', timeout => 300);
 
