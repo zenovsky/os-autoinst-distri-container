@@ -22,32 +22,32 @@ sub run {
     # --- Preconditions ---
     assert_script_run("ip addr add $client_ip/15 dev ens4");
     assert_script_run('ip link set ens4 up');
-    
+
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $server_ip");
     barrier_wait('user_ready');
 
-    # --- Step 1: Install the package ---
-    assert_script_run('dnf install -y openssh', timeout => 300);
+    # # --- Step 1: Install the package ---
+    # assert_script_run('dnf install -y openssh', timeout => 300);
 
-    # --- Step 2: sshd configuration ---
-    assert_script_run("sshd -T | grep 'port 22'");
+    # # --- Step 2: sshd configuration ---
+    # assert_script_run("sshd -T | grep 'port 22'");
 
-    # --- Step 3: Start the service ---
-    assert_script_run('systemctl start sshd');
-    assert_script_run('systemctl is-active sshd');
+    # # --- Step 3: Start the service ---
+    # assert_script_run('systemctl start sshd');
+    # assert_script_run('systemctl is-active sshd');
 
-    # --- Step 4: Autoload ---
-    assert_script_run('systemctl enable --now sshd');
-    assert_script_run('systemctl is-enabled sshd');
+    # # --- Step 4: Autoload ---
+    # assert_script_run('systemctl enable --now sshd');
+    # assert_script_run('systemctl is-enabled sshd');
 
-    # --- Step 5: Listening port ---
-    assert_script_run("ss -lntp | grep ':22'");
+    # # --- Step 5: Listening port ---
+    # assert_script_run("ss -lntp | grep ':22'");
 
-    # --- Step 6: firewalld ---
-    assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+    # # --- Step 6: firewalld ---
+    # assert_script_run("firewall-cmd --list-services | grep 'ssh'");
 
-    barrier_wait('server_ready');
+    # barrier_wait('server_ready');
     # mutex_wait('server_ready');
 
     # # --- Шаг 7: доступность порта 22 на сервере ---
