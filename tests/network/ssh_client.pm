@@ -27,7 +27,7 @@ sub run {
     # assert_script_run('echo "nameserver 1.1.1.1" >> /etc/resolv.conf');
     #assert_script_run('systemctl restart NetworkManager');
     assert_script_run('cat /etc/resolv.conf');
-    asssert_script_run('dig @8.8.8.8 mirrors.almalinux.org');
+    assert_script_run('dig @8.8.8.8 mirrors.almalinux.org');
 
     barrier_wait('net_ready');
     assert_script_run("ping -c 4 $server_ip");
