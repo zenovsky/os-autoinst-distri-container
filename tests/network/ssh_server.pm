@@ -20,50 +20,50 @@ my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
 sub run {
     # --- Preconditions ---
-    assert_script_run("ip addr add $server_ip/15 dev ens4");
-    assert_script_run('ip link set ens4 up');
-    assert_script_run('ip route add default via 172.16.2.2 dev ens4');
+    assert_script_run "ip addr add $server_ip/15 dev ens4";
+    assert_script_run "ip link set ens4 up";
+    assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
-    assert_script_run 'getent hosts mirror.yandex.ru';
 
-    barrier_create('net_ready', 2);
-    barrier_create('user_ready', 2);
+    barrier_create "net_ready", 2;
+    barrier_create "user_ready", 2;
 
-    barrier_wait('net_ready');
-    assert_script_run("ping -c 4 $client_ip");
-    assert_script_run("useradd -m -s /bin/bash $test_user");
-    assert_script_run("echo '$test_user:$test_pass' | chpasswd");
-    barrier_wait('user_ready');
+    barrier_wait "net_ready";
+    assert_script_run "ping -c 4 $client_ip";
+    assert_script_run "useradd -m -s /bin/bash $test_user";
+    assert_script_run "echo '$test_user:$test_pass' | chpasswd";
+    barrier_wait "user_ready";
 
-    barrier_create('package_ready', 2);
+    barrier_create "package_ready", 2;
     # --- Step 1: Install the package ---
-    assert_script_run('dnf install -y openssh');
+    assert_script_run "dnf install -y openssh";
 
     # --- Step 2: sshd configuration ---
-    assert_script_run("sshd -T | grep 'port 22'");
+    assert_script_run "sshd -T | grep 'port 22'";
 
     # --- Step 3: Start the service ---
-    assert_script_run('systemctl start sshd');
-    assert_script_run('systemctl is-active sshd');
+    assert_script_run "systemctl start sshd";
+    assert_script_run "systemctl is-active sshd";
 
     # --- Step 4: Autoload ---
-    assert_script_run('systemctl enable --now sshd');
-    assert_script_run('systemctl is-enabled sshd');
+    assert_script_run "systemctl enable --now sshd";
+    assert_script_run "systemctl is-enabled sshd";
 
     # --- Step 5: Listening port ---
-    assert_script_run("ss -lntp | grep ':22'");
+    assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    assert_script_run("firewall-cmd --list-services | grep 'ssh'");
+    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    barrier_wait('package_ready');
-    # mutex_create('server_ready');
+    barrier_wait "package_ready";
 
-    # # ждём, пока клиент установит публичный ключ (шаги 11-13)
-    # mutex_wait('client_key_installed');
+    # wait for the client to install the public key (steps 11-13)
+    barrier_create "client_key_installed", 2;
+    barrier_wait "client_key_installed";
 
-    # # ждём, пока клиент проверит вход по верному/неверному ключу (шаги 14-15)
-    # mutex_wait('client_key_checks_done');
+    # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
+    barrier_create "client_key_checks_done", 2;
+    barrier_wait "client_key_checks_done";
 
     # # --- Шаг 16: перезапуск службы sshd ---
     # assert_script_run('systemctl restart sshd');
