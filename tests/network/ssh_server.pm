@@ -35,7 +35,7 @@ sub run {
     barrier_wait "user_ready";
 
     # --- Step 1: Install the package ---
-    #barrier_create "package_ready", 2;
+    barrier_create "package_ready", 2;
     assert_script_run "dnf install -y openssh";
 
     # --- Step 2: sshd configuration ---
