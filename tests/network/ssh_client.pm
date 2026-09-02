@@ -54,10 +54,17 @@ sub run {
     barrier_wait "package_ready";
 
     # # --- Step 7: Make sure port 22 is available on the server---
-    my $curl_out = script_output(
-        "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
-    die "Port 22 unreachable or no SSH banner:\n$curl_out"
-      unless $curl_out =~ /OpenSSH/;
+    # my $curl_out = script_output(
+    #     "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
+    # die "Port 22 unreachable or no SSH banner:\n$curl_out"
+    #   unless $curl_out =~ /OpenSSH/;
+    my $curl_out;
+    try {
+        $curl_out = script_output("curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
+    } catch {
+        die "Command execution failed: $_";
+    };
+    die "No SSH banner" unless $curl_out =~ /OpenSSH/;
 
     #assert_script_run "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22"; 
 
