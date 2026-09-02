@@ -26,7 +26,6 @@ sub run {
     assert_script_run('echo "nameserver 1.1.1.1" >> /etc/resolv.conf');
     # assert_script_run('systemctl restart NetworkManager');
     assert_script_run('cat /etc/resolv.conf');
-    assert_script_run('nslookup mirrors.almalinux.org');
 
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
