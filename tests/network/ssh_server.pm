@@ -34,8 +34,8 @@ sub run {
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
     barrier_wait "user_ready";
 
-    barrier_create "package_ready", 2;
     # --- Step 1: Install the package ---
+    #barrier_create "package_ready", 2;
     assert_script_run "dnf install -y openssh";
 
     # --- Step 2: sshd configuration ---
@@ -55,7 +55,7 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    barrier_wait "package_ready";
+    #barrier_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
     barrier_create "client_key_installed", 2;

@@ -50,7 +50,7 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    barrier_wait "package_ready";
+    #barrier_wait "package_ready";
 
     # # --- Step 7: Make sure port 22 is available on the server---
     my $curl_out = script_output(
