@@ -23,7 +23,7 @@ sub run {
     assert_script_run('ip link set ens4 up');
     assert_script_run('ip route add default via 172.16.2.2 dev ens4');
 
-    assert_script_run('cat /etc/resolv.conf');
+    assert_script_run 'curl -v http://mirror.yandex.ru/almalinux/10.2/AppStream/x86_64/os/repodata/repomd.xml 2>&1 | tail -20';
 
     barrier_create('net_ready', 2);
     barrier_create('user_ready', 2);
