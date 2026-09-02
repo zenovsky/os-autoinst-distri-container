@@ -30,6 +30,7 @@ sub run {
 
     barrier_wait "net_ready";
     assert_script_run "ping -c 4 $client_ip";
+    
     assert_script_run "useradd -m -s /bin/bash $test_user";
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
     barrier_wait "user_ready";
@@ -54,8 +55,7 @@ sub run {
 
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-
-    #barrier_wait "package_ready";
+    barrier_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
     barrier_create "client_key_installed", 2;
