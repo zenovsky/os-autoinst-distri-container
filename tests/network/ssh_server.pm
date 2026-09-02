@@ -38,7 +38,7 @@ sub run {
 
     barrier_create('package_ready', 2);
     # --- Step 1: Install the package ---
-    assert_script_run('dnf install -y --setopt=debuglevel=10 openssh 2>&1 | tail -50', timeout => 300);
+    assert_script_run('dnf install -y openssh');
 
     # --- Step 2: sshd configuration ---
     assert_script_run("sshd -T | grep 'port 22'");
