@@ -10,6 +10,7 @@ use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
 use mmapi;
+use Try::Tiny;
 
 my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
 my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
@@ -53,12 +54,12 @@ sub run {
     barrier_wait "package_ready";
 
     # # --- Step 7: Make sure port 22 is available on the server---
-    # my $curl_out = script_output(
-    #     "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
-    # die "Port 22 unreachable or no SSH banner:\n$curl_out"
-    #   unless $curl_out =~ /OpenSSH/;
+    my $curl_out = script_output(
+        "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22");
+    die "Port 22 unreachable or no SSH banner:\n$curl_out"
+      unless $curl_out =~ /OpenSSH/;
 
-    assert_script_run "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22"; 
+    #assert_script_run "curl -s --connect-timeout 2 -m 3 telnet://$server_ip:22"; 
 
     # --- Steps 8-10: Connecting with a password ---
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
