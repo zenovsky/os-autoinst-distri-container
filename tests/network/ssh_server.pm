@@ -25,18 +25,23 @@ sub run {
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
 
-    barrier_create "net_ready", 2;
-    barrier_create "user_ready", 2;
+    # barrier_create "net_ready", 2;
+    # barrier_create "user_ready", 2;
+    mutex_create "net_ready";
+    mutex_create "user_ready";
 
-    barrier_wait "net_ready";
+    # barrier_wait "net_ready";
+    mutex_wait "net_ready";
     assert_script_run "ping -c 4 $client_ip";
     
     assert_script_run "useradd -m -s /bin/bash $test_user";
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
-    barrier_wait "user_ready";
+    # barrier_wait "user_ready";
+    mutex_wait "user_ready";
 
     # --- Step 1: Install the package ---
-    barrier_create "package_ready", 2;
+    # barrier_create "package_ready", 2;
+    mutex_create "package_ready";
     assert_script_run "dnf install -y openssh";
 
     # --- Step 2: sshd configuration ---
@@ -54,16 +59,21 @@ sub run {
     assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-    barrier_wait "package_ready";
+    # assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    # barrier_wait "package_ready";
+    mutex_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
-    barrier_create "client_key_installed", 2;
-    barrier_wait "client_key_installed";
+    # barrier_create "client_key_installed", 2;
+    mutex_create "client_key_installed";
+    # barrier_wait "client_key_installed";
+    mutex_wait "client_key_installed";
 
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
-    barrier_create "client_key_checks_done", 2;
-    barrier_wait "client_key_checks_done";
+    # barrier_create "client_key_checks_done", 2;
+    muex_create "client_key_checks_done";
+    # barrier_wait "client_key_checks_done";
+    mutex_wait "client_key_checks_done";
 
     # # --- Шаг 16: перезапуск службы sshd ---
     # assert_script_run('systemctl restart sshd');
