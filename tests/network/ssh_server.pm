@@ -71,7 +71,7 @@ sub run {
 
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
     # barrier_create "client_key_checks_done", 2;
-    muex_create "client_key_checks_done";
+    mutex_create "client_key_checks_done";
     # barrier_wait "client_key_checks_done";
     mutex_wait "client_key_checks_done";
 
