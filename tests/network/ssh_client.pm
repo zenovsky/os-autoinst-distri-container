@@ -65,7 +65,7 @@ sub run {
     wait_still_screen(3);
     assert_script_run "whoami | grep '$test_user'";
     assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
-    #enter_cmd 'exit';
+    enter_cmd 'exit';
 
     # --- Step 11: Generate a key ---
     assert_script_run "ssh-keygen -t ed25519 -f $keyfile -N ''";
