@@ -62,6 +62,7 @@ sub run {
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
     assert_screen 'ssh-password-prompt', 30;
     type_string "$test_pass\n";
+    wait_still_screen(3);
     assert_script_run "whoami | grep '$test_user'";
     assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
     enter_cmd 'exit';
