@@ -10,7 +10,6 @@ use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
 use mmapi;
-use strict;
 use warnings;
 
 my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
