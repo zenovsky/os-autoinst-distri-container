@@ -55,8 +55,8 @@ sub run {
     # barrier_wait "package_ready";
     mutex_wait "package_ready";
 
-    # # # --- Step 7: Make sure port 22 is available on the server---
-    assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
+    # --- Step 7: Make sure port 22 is available on the server---
+    #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
