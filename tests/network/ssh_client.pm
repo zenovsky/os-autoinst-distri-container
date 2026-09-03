@@ -59,13 +59,40 @@ sub run {
     # assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
-    type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
-    assert_screen 'ssh-password-prompt', 30;
-    type_string "$test_pass\n";
-    wait_still_screen(3);
-    assert_script_run "whoami | grep '$test_user'";
-    assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
-    enter_cmd 'exit';
+    # type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
+    # assert_screen 'ssh-password-prompt', 30;
+    # type_string "$test_pass\n";
+    # wait_still_screen(3);
+    # assert_script_run "whoami | grep '$test_user'";
+    # assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
+    # enter_cmd 'exit';
+    # --- Steps 8-10: Connecting with a password (интерактивно) ---
+    # Запускаем интерактивную SSH-сессию через script для получения псевдотерминала
+    script_start_io("script -qe -c 'ssh -o StrictHostKeyChecking=no $test_user\@$server_ip' /dev/null");
+
+    # Ожидаем запрос пароля (можно искать "password:" или "sword:" – зависит от локали)
+    die "password prompt did not appear\n" unless wait_serial('sword:', timeout => 30);
+    enter_cmd($test_pass);   # отправляем пароль (enter_cmd добавляет \n)
+
+    # Ожидаем приглашение оболочки (обычно заканчивается на $ или #)
+    # Можно также ожидать появление имени пользователя в приглашении, но проще дождаться любого промпта
+    if (!wait_serial('\\$ ', timeout => 30) && !wait_serial('# ', timeout => 30)) {
+        die "Shell prompt did not appear after password\n";
+    }
+
+    # Проверяем, что мы залогинились под нужным пользователем (whoami)
+    type_string("whoami\n");
+    wait_serial($test_user, timeout => 10) or die "whoami didn't return expected user '$test_user'";
+
+    # Проверяем домашний каталог
+    type_string("echo \$HOME\n");
+    wait_serial("/home/$test_user", timeout => 10) or die "HOME is not '/home/$test_user'";
+
+    # Выходим из SSH-сессии
+    type_string("exit\n");
+
+    # Дожидаемся завершения интерактивного процесса
+    script_finish_io(timeout => 30, exitcodes => [0]);    
 
     # --- Step 11: Generate a key ---
     assert_script_run "ssh-keygen -t ed25519 -f $keyfile -N ''";
