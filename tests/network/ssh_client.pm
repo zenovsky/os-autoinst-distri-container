@@ -10,7 +10,6 @@ use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
 use mmapi;
-use warnings;
 
 my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
 my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
@@ -19,45 +18,6 @@ my $dns_ip = get_var('DNS_IP');
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
-
-sub script_start_io {
-    my ($cmd, %args) = @_;
-
-    my $marker = '; echo sioresult-$?-';
-
-    if (is_serial_terminal) {
-        wait_serial(serial_terminal::serial_term_prompt(), no_regex => 1,
-            quiet => $args{quiet});
-    }
-    else {
-        $cmd .= " >/dev/$serialdev";
-        $marker .= " >/dev/$serialdev";
-    }
-
-    type_string($cmd . $marker);
-    wait_serial($cmd . $marker, no_regex => 1, quiet => $args{quiet})
-      if is_serial_terminal;
-    type_string("\n");
-}
-
-sub script_finish_io {
-    my %args = @_;
-    my $exit_codes = $args{exitcodes};
-
-    $args{timeout} //= $bmwqemu::default_timeout;
-
-    my $res = wait_serial(qr/sioresult-\d+-/, timeout => $args{timeout},
-        quiet => $args{quiet});
-    return if !defined($exit_codes) && !defined($res);
-    die 'Interactive command failed to exit' unless defined($res);
-
-    $res =~ m/sioresult-(\d+)-/;
-    my $ret = $1;
-    die "Interactive command returned unexpected value $ret"
-      if defined($exit_codes) && !grep { $_ == $ret } @$exit_codes;
-    return $ret;
-}
-
 
 sub run {
     # --- Preconditions ---
@@ -96,44 +56,16 @@ sub run {
     mutex_wait "package_ready";
 
     # # # --- Step 7: Make sure port 22 is available on the server---
-    # assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
+    assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
-    # type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
-    # assert_screen 'ssh-password-prompt', 30;
-    # type_string "$test_pass\n";
-    # wait_still_screen(3);
-    # assert_script_run "whoami | grep '$test_user'";
-    # assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
-    # enter_cmd 'exit';
-
-    # --- Steps 8-10: Connecting with a password (интерактивно) ---
-    # Запускаем интерактивную SSH-сессию через script для получения псевдотерминала
-    script_start_io("script -qe -c 'ssh -o StrictHostKeyChecking=no $test_user\@$server_ip' /dev/null");
-
-    # Ожидаем запрос пароля (можно искать "password:" или "sword:" – зависит от локали)
-    die "password prompt did not appear\n" unless wait_serial('sword:', timeout => 30);
-    enter_cmd($test_pass);   # отправляем пароль (enter_cmd добавляет \n)
-
-    # Ожидаем приглашение оболочки (обычно заканчивается на $ или #)
-    # Можно также ожидать появление имени пользователя в приглашении, но проще дождаться любого промпта
-    if (!wait_serial('\\$ ', timeout => 30) && !wait_serial('# ', timeout => 30)) {
-        die "Shell prompt did not appear after password\n";
-    }
-
-    # Проверяем, что мы залогинились под нужным пользователем (whoami)
-    type_string("whoami\n");
-    wait_serial($test_user, timeout => 10) or die "whoami didn't return expected user '$test_user'";
-
-    # Проверяем домашний каталог
-    type_string("echo \$HOME\n");
-    wait_serial("/home/$test_user", timeout => 10) or die "HOME is not '/home/$test_user'";
-
-    # Выходим из SSH-сессии
-    type_string("exit\n");
-
-    # Дожидаемся завершения интерактивного процесса
-    script_finish_io(timeout => 30, exitcodes => [0]);
+    type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
+    assert_screen 'ssh-password-prompt', 30;
+    type_string "$test_pass\n";
+    wait_still_screen(3);
+    assert_script_run "whoami | grep '$test_user'";
+    assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
+    #enter_cmd 'exit';
 
     # --- Step 11: Generate a key ---
     assert_script_run "ssh-keygen -t ed25519 -f $keyfile -N ''";
