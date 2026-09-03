@@ -74,7 +74,7 @@ sub run {
     assert_script_run "ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub";
 
     # --- Steps 12-13: Installing the public key on the server ---
-    type_string "ssh-copy-id -4 -i ~/.ssh/id_ed25519_test.pub $test_user\@$server_ip\n";
+    type_string "ssh-copy-id -i ~/.ssh/id_ed25519_test.pub $test_user\@$server_ip\n";
     assert_screen 'ssh-password-prompt', 30;
     type_string "$test_pass\n";
     wait_still_screen(3);
