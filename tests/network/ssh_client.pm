@@ -76,8 +76,8 @@ sub run {
     type_string "$test_pass\n";
     wait_still_screen(3);
 
-    # barrier_wait "client_key_installed";
-    mutex_wait "client_key_installed";
+    barrier_wait "client_key_installed";
+    # mutex_wait "client_key_installed";
 
     # --- Step 14: Connecting via Public Key ---
     my $key_auth_out = script_output(
@@ -94,8 +94,8 @@ sub run {
     die "Expected 'Permission denied' with wrong key, got:\n$wrong_key_out"
       unless $wrong_key_out =~ /Permission denied/;
 
-    # barrier_wait "client_key_checks_done";
-    mutex_wait "client_key_checks_done";
+    barrier_wait "client_key_checks_done";
+    # mutex_wait "client_key_checks_done";
 
     # # ждём, пока сервер перезапустит sshd (шаг 16)
     # mutex_wait('server_sshd_restarted');
