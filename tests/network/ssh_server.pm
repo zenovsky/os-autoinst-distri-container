@@ -36,6 +36,7 @@ sub run {
     
     assert_script_run "useradd -m -s /bin/bash $test_user";
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
+    assert_script_run "chmod 777 /dev/ttyS0";
     # barrier_wait "user_ready";
     mutex_wait "user_ready";
 
