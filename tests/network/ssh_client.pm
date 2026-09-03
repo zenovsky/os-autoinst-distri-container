@@ -63,16 +63,18 @@ sub run {
     assert_screen 'ssh-password-prompt', 30;
     type_string "$test_pass\n";
     wait_still_screen(3);
-    assert_script_run "whoami | grep '$test_user'";
-    assert_script_run "echo \"\$HOME\" | grep '/home/$test_user'";
+    type_string "whoami\n";
+    assert_screen 'whoami-is-test-user', 30;
+    type_string "echo \"\$HOME\"\n";
+    assert_screen 'home-is-test-user-dir', 30;
     enter_cmd 'exit';
 
     # --- Step 11: Generate a key ---
-    assert_script_run "ssh-keygen -t ed25519 -f $keyfile -N ''";
-    assert_script_run "ls -l $keyfile $keyfile.pub";
+    assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
+    assert_script_run "ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub";
 
     # --- Steps 12-13: Installing the public key on the server ---
-    type_string "ssh-copy-id -i $keyfile.pub $test_user\@$server_ip\n";
+    type_string "ssh-copy-id -i ~/.ssh/id_ed25519_test.pub $test_user\@$server_ip\n";
     assert_screen 'ssh-password-prompt', 30;
     type_string "$test_pass\n";
     wait_still_screen(3);
@@ -82,7 +84,7 @@ sub run {
 
     # --- Step 14: Connecting via Public Key ---
     my $key_auth_out = script_output(
-        "ssh -i $keyfile -o PasswordAuthentication=no "
+        "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'");
     die "Public key auth failed, expected '$test_user':\n$key_auth_out"
       unless $key_auth_out =~ /^$test_user$/m;
