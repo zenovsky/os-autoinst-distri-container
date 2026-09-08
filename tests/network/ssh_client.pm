@@ -26,10 +26,8 @@ sub run {
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
 
-    # barrier_wait "net_ready";
     mutex_wait "net_ready";
     assert_script_run "ping -c 4 $server_ip";
-    # barrier_wait "user_ready";
     mutex_wait "user_ready";
 
     # --- Step 1: Install the package ---
@@ -56,7 +54,7 @@ sub run {
     mutex_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
-    #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
+    assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
@@ -83,7 +81,6 @@ sub run {
     type_string "$test_pass\n";
     wait_still_screen(3);
 
-    # barrier_wait "client_key_installed";
     mutex_wait "client_key_installed";
 
     # --- Step 14: Connecting via Public Key ---
@@ -101,7 +98,6 @@ sub run {
     die "Expected 'Permission denied' with wrong key, got:\n$wrong_key_out"
       unless $wrong_key_out =~ /Permission denied/;
 
-    # barrier_wait "client_key_checks_done";
     mutex_wait "client_key_checks_done";
 
     # # ждём, пока сервер перезапустит sshd (шаг 16)
