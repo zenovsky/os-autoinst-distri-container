@@ -20,6 +20,8 @@ my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
+    mutex_lock "net_ready";
+    mutex_unlock "net_ready";
     # --- Preconditions ---
     assert_script_run "ip addr add $client_ip/15 dev ens4";
     assert_script_run "ip link set ens4 up";
@@ -28,10 +30,13 @@ sub run {
 
     mutex_create "client_net_ready";
 
-    mutex_lock "server_net_ready";
-    mutex_unlock "server_net_ready";
-
     assert_script_run "ping -c 4 $server_ip";
+
+    mutex_lock "user_ready";
+    mutex_unlock "user_ready";
+
+    mutex_lock "package_ready";
+    mutex_unlock "package_ready";
 
     # --- Step 1: Install the package ---
     assert_script_run "dnf install -y openssh";
@@ -53,8 +58,8 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    mutex_lock "server_sshd_ready";
-    mutex_unlock "server_sshd_ready";
+    # mutex_lock "server_sshd_ready";
+    # mutex_unlock "server_sshd_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
     #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
@@ -84,7 +89,9 @@ sub run {
     type_string "$test_pass\n";
     wait_still_screen(3);
 
-    mutex_create "client_key_installed";
+    mutex_unlock "client_key_installed";
+
+    # mutex_create "client_key_installed";
 
     # --- Step 14: Connecting via Public Key ---
     my $key_auth_out = script_output(
@@ -101,7 +108,7 @@ sub run {
     die "Expected 'Permission denied' with wrong key, got:\n$wrong_key_out"
       unless $wrong_key_out =~ /Permission denied/;
 
-    mutex_create "client_key_checks_done";
+    mutex_unlock "client_key_checks_done";
 
     # # ждём, пока сервер перезапустит sshd (шаг 16)
     # mutex_wait('server_sshd_restarted');

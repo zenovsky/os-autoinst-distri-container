@@ -19,17 +19,15 @@ my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
 sub run {
-    my $children = get_children();
-    my $child_id = (keys %$children)[0];
     # --- Preconditions ---
     assert_script_run "ip addr add $server_ip/15 dev ens4";
     assert_script_run "ip link set ens4 up";
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
 
-    mutex_create "server_net_ready";
+    mutex_create "net_ready";
 
-    mutex_lock "client_net_ready", $child_id;
+    mutex_lock "client_net_ready";
     mutex_unlock "client_net_ready";
 
     assert_script_run "ping -c 4 $client_ip";
@@ -37,6 +35,8 @@ sub run {
     assert_script_run "useradd -m -s /bin/bash $test_user";
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
     assert_script_run "chmod 777 /dev/ttyS0";
+
+    mutex_create "user_ready";
 
     # --- Step 1: Install the package ---
     assert_script_run "dnf install -y openssh";
@@ -58,18 +58,19 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    mutex_create "server_sshd_ready";
+    mutex_create "package_ready";
 
-    mutex_lock "client_key_installed", $child_id;
-    mutex_unlock "client_key_installed";
+    mutex_create "client_key_installed";
+
+    mutex_lock "client_key_installed";
 
     # wait for the client to install the public key (steps 11-13)
     # mutex_create "client_key_installed";
 
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
     # mutex_create "client_key_checks_done";
-    mutex_lock "client_key_checks_done", $child_id;
-    mutex_unlock "client_key_checks_done";
+    mutex_create "client_key_checks_done";
+    mutex_lock "client_key_checks_done";
 
     # # --- Шаг 16: перезапуск службы sshd ---
     # assert_script_run('systemctl restart sshd');
