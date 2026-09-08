@@ -26,11 +26,11 @@ sub run {
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
 
-    barrier_wait "net_ready";
-    # mutex_wait "net_ready";
+    # barrier_wait "net_ready";
+    mutex_wait "net_ready";
     assert_script_run "ping -c 4 $server_ip";
-    barrier_wait "user_ready";
-    # mutex_wait "user_ready";
+    # barrier_wait "user_ready";
+    mutex_wait "user_ready";
 
     # --- Step 1: Install the package ---
     assert_script_run "dnf install -y openssh";
@@ -52,8 +52,8 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
-    barrier_wait "package_ready";
-    # mutex_wait "package_ready";
+    # barrier_wait "package_ready";
+    mutex_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
     #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
