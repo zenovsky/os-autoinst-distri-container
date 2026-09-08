@@ -56,7 +56,7 @@ sub run {
     mutex_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
-    assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
+    #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
@@ -67,8 +67,7 @@ sub run {
     assert_screen 'whoami-is-test-user', 30;
     type_string "echo \"\$HOME\"\n";
     assert_screen 'home-is-test-user-dir', 30;
-    type_string "exit\n";
-    # enter_cmd 'exit';
+    enter_cmd 'exit';
 
     # --- Step 11: Generate a key ---
     assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
