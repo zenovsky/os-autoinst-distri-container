@@ -26,17 +26,16 @@ sub run {
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
 
     mutex_create "net_ready";
-    mutex_create "user_ready";
 
-    mutex_wait "net_ready";
     assert_script_run "ping -c 4 $client_ip";
     
     assert_script_run "useradd -m -s /bin/bash $test_user";
     assert_script_run "echo '$test_user:$test_pass' | chpasswd";
     assert_script_run "chmod 777 /dev/ttyS0";
 
+    mutex_create "user_ready";
+
     # --- Step 1: Install the package ---
-    mutex_create "package_ready";
     assert_script_run "dnf install -y openssh";
 
     # --- Step 2: sshd configuration ---
@@ -56,11 +55,18 @@ sub run {
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
 
+    mutex_create "package_ready";
+
+    mutex_lock "client_key_installed";
+    mutex_unlock "client_key_installed";
+
     # wait for the client to install the public key (steps 11-13)
-    mutex_create "client_key_installed";
+    # mutex_create "client_key_installed";
 
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
-    mutex_create "client_key_checks_done";
+    # mutex_create "client_key_checks_done";
+    mutex_lock "client_key_checks_done";
+    mutex_unlock "client_key_checks_done";
 
     # # --- Шаг 16: перезапуск службы sshd ---
     # assert_script_run('systemctl restart sshd');
