@@ -67,7 +67,8 @@ sub run {
     assert_screen 'whoami-is-test-user', 30;
     type_string "echo \"\$HOME\"\n";
     assert_screen 'home-is-test-user-dir', 30;
-    enter_cmd 'exit';
+    type_string "exit\n";
+    # enter_cmd 'exit';
 
     # --- Step 11: Generate a key ---
     assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
