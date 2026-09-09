@@ -92,6 +92,7 @@ sub run {
     barrier_wait "server_sshd_restarted";
 
     # --- Step 17: Verifying SSH after restarting the service ---
+    assert_script_run "ping -c 3 -W 2 $server_ip";
     assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok1 = script_output(
