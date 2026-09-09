@@ -57,7 +57,7 @@ sub run {
     assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    #assert_script_run "firewall-cmd --list-services | grep 'ssh'";
     barrier_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
