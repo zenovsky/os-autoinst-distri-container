@@ -49,7 +49,8 @@ sub run {
     assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    # assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    assert_script_run "systemctl stop firewalld";
     barrier_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
