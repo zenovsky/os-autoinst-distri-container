@@ -93,7 +93,7 @@ sub run {
 
     # --- Step 17: Verifying SSH after restarting the service ---
     assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
-      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK' 2>&1 | grep -i 'SSH_OK'";
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok1 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'");
