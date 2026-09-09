@@ -82,6 +82,7 @@ sub run {
 
     # --- Step 18: Server reboot ---
     enter_cmd('reboot');
+    wait_still_screen(15);
     assert_screen 'console-root', 720;
     type_string 'root';
     send_key 'ret';
