@@ -21,10 +21,6 @@ my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
-    # assert_script_run "nmcli device set ens4 managed no";
-    # assert_script_run "ip addr add $client_ip/15 dev ens4";
-    # assert_script_run "ip link set ens4 up";
-    # assert_script_run "ip route add default via 172.16.2.2 dev ens4";
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
       . "ipv4.addresses $client_ip/15 ipv4.gateway 172.16.2.2 "
       . "ipv4.dns $dns_ip ipv4.method manual";
@@ -58,7 +54,7 @@ sub run {
     barrier_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
-    #assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
+    assert_script_run "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
 
     # --- Steps 8-10: Connecting with a password ---
     type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
