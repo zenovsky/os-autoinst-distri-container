@@ -21,10 +21,14 @@ my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
-    assert_script_run "nmcli device set ens4 managed no";
-    assert_script_run "ip addr add $client_ip/15 dev ens4";
-    assert_script_run "ip link set ens4 up";
-    assert_script_run "ip route add default via 172.16.2.2 dev ens4";
+    # assert_script_run "nmcli device set ens4 managed no";
+    # assert_script_run "ip addr add $client_ip/15 dev ens4";
+    # assert_script_run "ip link set ens4 up";
+    # assert_script_run "ip route add default via 172.16.2.2 dev ens4";
+    assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
+      . "ipv4.addresses $client_ip/15 ipv4.gateway 172.16.2.2 "
+      . "ipv4.dns $dns_ip ipv4.method manual";
+    assert_script_run "nmcli con up ens4-static";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     barrier_wait "net_ready";
 

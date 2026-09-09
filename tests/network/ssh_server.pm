@@ -26,10 +26,14 @@ sub run {
     barrier_create "client_key_checks_done", 2;
 
     # --- Preconditions ---
-    assert_script_run "nmcli device set ens4 managed no";
-    assert_script_run "ip addr add $server_ip/15 dev ens4";
-    assert_script_run "ip link set ens4 up";
-    assert_script_run "ip route add default via 172.16.2.2 dev ens4";
+    # assert_script_run "nmcli device set ens4 managed no";
+    # assert_script_run "ip addr add $server_ip/15 dev ens4";
+    # assert_script_run "ip link set ens4 up";
+    # assert_script_run "ip route add default via 172.16.2.2 dev ens4";
+    assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
+        . "ipv4.addresses $server_ip/15 ipv4.gateway 172.16.2.2 "
+        . "ipv4.dns $dns_ip ipv4.method manual";
+    assert_script_run "nmcli con up ens4-static";
     assert_script_run "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     barrier_wait "net_ready";
 
