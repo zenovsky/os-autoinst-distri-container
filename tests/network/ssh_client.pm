@@ -97,9 +97,9 @@ sub run {
     script_run "ip addr show ens4";
     script_run "ip route";
     script_run "ip neigh show";
-    script_run "nmcli -f NAME,DEVICE,STATE,CONNECTION con show";
+    # script_run "nmcli -f NAME,DEVICE,STATE,CONNECTION con show";
     die "ping to $server_ip failed, rc=" . (defined $ping_rc ? $ping_rc : 'undef') unless defined $ping_rc && $ping_rc == 0;
-    
+
     assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok1 = script_output(
