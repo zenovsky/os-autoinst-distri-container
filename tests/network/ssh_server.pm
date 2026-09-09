@@ -71,6 +71,8 @@ sub run {
     # --- Step 16: Restart the sshd service ---
     assert_script_run "systemctl restart sshd";
     assert_script_run "systemctl is-active sshd";
+    assert_script_run "ss -lntp | grep ':22'";
+    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
     barrier_wait "server_sshd_restarted";
 
     # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
