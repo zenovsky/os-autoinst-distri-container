@@ -95,21 +95,17 @@ sub run {
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     barrier_wait "server_rebooted";
 
-    # mutex_create('client_post_reboot_done');
-    # mutex_wait('server_updated');
-
     # --- Step 20: Verifying SSH after system reboot ---
     assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
-      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
-    # my $ok2 = script_output(
-    #     "ssh -i $keyfile -o PasswordAuthentication=no "
-    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
-    #   . "'echo SSH_OK_AFTER_REBOOT'");
-    # die "SSH check failed after system reboot:\n$ok2"
-    #   unless $ok2 =~ /SSH_OK_AFTER_REBOOT/;
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_REBOOT'";
     barrier_wait "client_post_reboot_done";
 
-    # # --- Шаг 23: SSH-сессия после обновления пакета на сервере ---
+    # We wait for the server to update sshd (step 21).
+    barrier_wait "server_updated";
+
+    # ---- Step 23: SSH session after package update on the server ---
+    assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'"
     # my $ok3 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
@@ -117,7 +113,7 @@ sub run {
     # die "SSH check failed after package update:\n$ok3"
     #   unless $ok3 =~ /SSH_OK_AFTER_UPDATE/;
 
-    # mutex_create('client_final_checks_done');
+    barrier_wait "client_final_checks_done";
 }
 
 sub test_flags {

@@ -29,6 +29,8 @@ sub run {
     barrier_create "server_sshd_restarted", 2;
     barrier_create "server_rebooted", 2;
     barrier_create "client_post_reboot_done", 2;
+    barrier_create "server_updated", 2;
+    barrier_create "client_final_checks_done", 2;
 
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
@@ -77,9 +79,6 @@ sub run {
     assert_script_run "systemctl is-active sshd";
     barrier_wait "server_sshd_restarted";
 
-    # waiting for the client to complete the SSH check after the service restart (step 17))
-    #barrier_wait "client_pre_reboot_done";
-
     # --- Step 18: Server reboot ---
     enter_cmd "reboot";
     wait_still_screen(15);
@@ -98,17 +97,18 @@ sub run {
     # waiting for the client to complete the SSH check after the system reboot (step 20))
     barrier_wait "client_post_reboot_done";
 
-    # # --- Шаг 21: проверка/установка обновления пакета ---
-    # my $update_out = script_output('dnf check-update openssh; true');
-    # if ($update_out !~ /no updates|nothing to do/i) {
-    #     assert_script_run('dnf update -y openssh', timeout => 300);
-    # }
+    # --- Step 21: checking/installing the package update ---
+    my $update_out = script_output('dnf check-update openssh; true');
+    if ($update_out !~ /no updates|nothing to do/i) {
+        assert_script_run('dnf update -y openssh', timeout => 300);
+    }
 
-    # # --- Шаг 22: служба активна после обновления ---
-    # assert_script_run('systemctl is-active sshd');
-    # mutex_create('server_updated');
+    # --- Step 22: Service active after update ---
+    assert_script_run "systemctl is-active sshd";
+    barrier_wait "server_updated";
 
-    # mutex_wait('client_final_checks_done');
+    # waiting for the client to complete the SSH check after the openssh update (step 23))
+    barrier_wait "client_final_checks_done";
 
     # # --- Шаг 27: проверка логов на ошибки ---
     # my $logs = script_output('journalctl -u sshd --no-pager -n 100');
