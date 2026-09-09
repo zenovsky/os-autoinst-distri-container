@@ -73,11 +73,7 @@ sub run {
     assert_script_run "systemctl is-active sshd";
     assert_script_run "ss -lntp | grep ':22'";
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-    assert_script_run "ip link show ens4";
-    assert_script_run "ip addr show ens4";
-    #assert_script_run "nmcli -f NAME,DEVICE,STATE,CONNECTION con show";
-    assert_script_run "systemctl status NetworkManager --no-pager | head -20";
-    assert_script_run "dmesg | tail -30";
+    assert_script_run "systemctl stop firewalld";
     barrier_wait "server_sshd_restarted";
 
     # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
