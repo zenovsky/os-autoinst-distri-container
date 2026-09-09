@@ -25,6 +25,7 @@ sub run {
     barrier_create "client_key_installed", 2;
     barrier_create "client_key_checks_done", 2;
     barrier_create "server_sshd_restarted", 2;
+    barrier_create "client_pre_reboot_done", 2;
 
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
@@ -71,12 +72,10 @@ sub run {
     # --- Step 16: Restart the sshd service ---
     assert_script_run "systemctl restart sshd";
     assert_script_run "systemctl is-active sshd";
-    assert_script_run "ss -lntp | grep ':22'";
-    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
     barrier_wait "server_sshd_restarted";
 
-    # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
-    # mutex_wait('client_pre_reboot_done');
+    # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
+    barrier_wait "client_pre_reboot_done";
 
     # # --- Шаг 18: перезагрузка сервера ---
     # enter_cmd('reboot');

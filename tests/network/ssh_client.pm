@@ -82,9 +82,9 @@ sub run {
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'";
 
     # # --- Step 15: Connection with an invalid key should be rejected ---
-    # assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
-    # assert_script_run "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
-    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
+    assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
+    assert_script_run "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
     barrier_wait "client_key_checks_done";
 
     # We wait for the server to restart sshd (step 16).
@@ -93,6 +93,7 @@ sub run {
     # --- Step 17: Verifying SSH after restarting the service ---
     assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
+    barrier_wait "client_pre_reboot_done";
     # my $ok1 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'");
