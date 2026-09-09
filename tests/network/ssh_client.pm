@@ -21,6 +21,7 @@ my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
+    assert_script_run "nmcli device set ens4 managed no";
     assert_script_run "ip addr add $client_ip/15 dev ens4";
     assert_script_run "ip link set ens4 up";
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
@@ -49,7 +50,7 @@ sub run {
     assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    #assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
     barrier_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---

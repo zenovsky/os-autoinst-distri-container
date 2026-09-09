@@ -26,6 +26,7 @@ sub run {
     barrier_create "client_key_checks_done", 2;
 
     # --- Preconditions ---
+    assert_script_run "nmcli device set ens4 managed no";
     assert_script_run "ip addr add $server_ip/15 dev ens4";
     assert_script_run "ip link set ens4 up";
     assert_script_run "ip route add default via 172.16.2.2 dev ens4";
@@ -57,7 +58,7 @@ sub run {
     assert_script_run "ss -lntp | grep ':22'";
 
     # --- Step 6: firewalld ---
-    #assert_script_run "firewall-cmd --list-services | grep 'ssh'";
+    assert_script_run "firewall-cmd --list-services | grep 'ssh'";
     barrier_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
