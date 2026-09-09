@@ -65,7 +65,7 @@ sub run {
     barrier_wait "client_key_installed";
 
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
-    # barrier_wait "client_key_checks_done";
+    barrier_wait "client_key_checks_done";
 
     # # --- Шаг 16: перезапуск службы sshd ---
     # assert_script_run('systemctl restart sshd');
