@@ -42,7 +42,7 @@ sub run {
     barrier_wait "user_ready";
 
     # --- Step 1: Install the package ---
-    assert_script_run "dnf install -y openssh";
+    assert_script_run "dnf install -y openssh", 300;
 
     # --- Step 2: sshd configuration ---
     assert_script_run "sshd -T | grep 'port 22'";
