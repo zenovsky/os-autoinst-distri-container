@@ -24,6 +24,7 @@ sub run {
     barrier_create "package_ready", 2;
     barrier_create "client_key_installed", 2;
     barrier_create "client_key_checks_done", 2;
+    barrier_create "server_sshd_restarted", 2;
 
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
@@ -67,10 +68,10 @@ sub run {
     # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
     barrier_wait "client_key_checks_done";
 
-    # # --- Шаг 16: перезапуск службы sshd ---
-    # assert_script_run('systemctl restart sshd');
-    # assert_script_run('systemctl is-active sshd');
-    # mutex_create('server_sshd_restarted');
+    # --- Step 16: Restart the sshd service ---
+    assert_script_run "systemctl restart sshd";
+    assert_script_run "systemctl is-active sshd";
+    barrier_wait "server_sshd_restarted";
 
     # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
     # mutex_wait('client_pre_reboot_done');

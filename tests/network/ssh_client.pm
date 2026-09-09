@@ -86,21 +86,14 @@ sub run {
     assert_script_run "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
     assert_script_run "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
-    # my $wrong_key_out = script_output(
-    #     "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
-    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1; true");
-    # die "Expected 'Permission denied' with wrong key, got:\n$wrong_key_out"
-    #   unless $wrong_key_out =~ /Permission denied/;
-
     barrier_wait "client_key_checks_done";
 
-    # # ждём, пока сервер перезапустит sshd (шаг 16)
-    # mutex_wait('server_sshd_restarted');
+    # We wait for the server to restart sshd (step 16).
+    barrier_wait "server_sshd_restarted";
 
-    # mutex_create('client_pre_reboot_done');
-    # mutex_wait('server_rebooted');
-
-    # # --- Шаг 17: проверка SSH после рестарта службы ---
+    # --- Step 17: Verifying SSH after restarting the service ---
+    assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK' 2>&1 | grep -i 'SSH_OK'";
     # my $ok1 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'");
