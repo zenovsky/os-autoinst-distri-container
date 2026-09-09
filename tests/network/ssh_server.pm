@@ -73,11 +73,11 @@ sub run {
     assert_script_run "systemctl is-active sshd";
     assert_script_run "ss -lntp | grep ':22'";
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-    assert_script_run "iptables -L -n -v 2>&1 | grep -i '$client_ip' || echo 'no iptables match'";
-    assert_script_run "nft list ruleset 2>&1 | grep -i '$client_ip' || echo 'no nftables match'";
-    assert_script_run "which fail2ban-client >/dev/null 2>&1 && fail2ban-client status sshd || echo 'fail2ban not installed/active'";
-    assert_script_run "journalctl -u fail2ban --no-pager 2>&1 | tail -50 || echo 'no fail2ban journal'";
-    assert_script_run "which sshguard >/dev/null 2>&1 && echo 'sshguard present' || echo 'no sshguard'";
+    assert_script_run "ip link show ens4";
+    assert_script_run "ip addr show ens4";
+    assert_script_run "nmcli -f NAME,DEVICE,STATE,CONNECTION con show";
+    assert_script_run "systemctl status NetworkManager --no-pager | head -20";
+    assert_script_run "dmesg | tail -30";
     barrier_wait "server_sshd_restarted";
 
     # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)

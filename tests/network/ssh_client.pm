@@ -92,7 +92,14 @@ sub run {
     barrier_wait "server_sshd_restarted";
 
     # --- Step 17: Verifying SSH after restarting the service ---
-    assert_script_run "ping -c 3 -W 2 $server_ip";
+    my $ping_rc = script_run("ping -c 3 -W 2 $server_ip");
+    script_run "ip link show ens4";
+    script_run "ip addr show ens4";
+    script_run "ip route";
+    script_run "ip neigh show";
+    script_run "nmcli -f NAME,DEVICE,STATE,CONNECTION con show";
+    die "ping to $server_ip failed, rc=" . (defined $ping_rc ? $ping_rc : 'undef') unless defined $ping_rc && $ping_rc == 0;
+    
     assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok1 = script_output(
