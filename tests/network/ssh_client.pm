@@ -93,24 +93,21 @@ sub run {
     # --- Step 17: Verifying SSH after restarting the service ---
     assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
-    #barrier_wait "client_pre_reboot_done";
     barrier_wait "server_rebooted";
-    # my $ok1 = script_output(
-    #     "ssh -i $keyfile -o PasswordAuthentication=no "
-    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'");
-    # die "SSH check failed after service restart:\n$ok1"
-    #   unless $ok1 =~ /SSH_OK/;
 
     # mutex_create('client_post_reboot_done');
     # mutex_wait('server_updated');
 
-    # # --- Шаг 20: проверка SSH после перезагрузки системы ---
+    # --- Step 20: Verifying SSH after system reboot ---
+    assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok2 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
     #   . "'echo SSH_OK_AFTER_REBOOT'");
     # die "SSH check failed after system reboot:\n$ok2"
     #   unless $ok2 =~ /SSH_OK_AFTER_REBOOT/;
+    barrier_wait "client_post_reboot_done";
 
     # # --- Шаг 23: SSH-сессия после обновления пакета на сервере ---
     # my $ok3 = script_output(

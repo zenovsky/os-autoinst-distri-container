@@ -27,8 +27,8 @@ sub run {
     barrier_create "client_key_installed", 2;
     barrier_create "client_key_checks_done", 2;
     barrier_create "server_sshd_restarted", 2;
-    #barrier_create "client_pre_reboot_done", 2;
     barrier_create "server_rebooted", 2;
+    barrier_create "client_post_reboot_done", 2;
 
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
@@ -81,7 +81,7 @@ sub run {
     #barrier_wait "client_pre_reboot_done";
 
     # --- Step 18: Server reboot ---
-    enter_cmd('reboot');
+    enter_cmd "reboot";
     wait_still_screen(15);
     assert_screen 'console-root', 720;
     type_string 'root';
@@ -92,10 +92,11 @@ sub run {
     assert_screen 'console-root-access', 720;
 
     # --- Step 19: Service is active after reboot ---
-    assert_script_run('systemctl is-active sshd');
+    assert_script_run "systemctl is-active sshd";
     barrier_wait "server_rebooted";
 
-    # mutex_wait('client_post_reboot_done');
+    # waiting for the client to complete the SSH check after the system reboot (step 20))
+    barrier_wait "client_post_reboot_done";
 
     # # --- Шаг 21: проверка/установка обновления пакета ---
     # my $update_out = script_output('dnf check-update openssh; true');
