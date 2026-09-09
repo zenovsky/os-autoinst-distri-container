@@ -73,7 +73,6 @@ sub run {
     assert_script_run "systemctl is-active sshd";
     assert_script_run "ss -lntp | grep ':22'";
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-    assert_script_run "systemctl stop firewalld";
     barrier_wait "server_sshd_restarted";
 
     # # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)

@@ -17,7 +17,6 @@ my $dns_ip = get_var('DNS_IP');
 
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
-my $keyfile   = get_var('SSH_KEY_PATH', '~/.ssh/id_ed25519_test');
 
 sub run {
     # --- Preconditions ---
@@ -92,8 +91,7 @@ sub run {
     barrier_wait "server_sshd_restarted";
 
     # --- Step 17: Verifying SSH after restarting the service ---
-    assert_script_run "systemctl stop firewalld";
-    assert_script_run "ssh -i $keyfile -o PasswordAuthentication=no "
+    assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     # my $ok1 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
