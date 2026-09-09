@@ -18,6 +18,8 @@ my $dns_ip = get_var('DNS_IP');
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
+my $root_password = get_var('ROOT_PASSWORD', '12345678');
+
 sub run {
     barrier_create "net_ready", 2;
     barrier_create "user_ready", 2;
@@ -25,7 +27,8 @@ sub run {
     barrier_create "client_key_installed", 2;
     barrier_create "client_key_checks_done", 2;
     barrier_create "server_sshd_restarted", 2;
-    barrier_create "client_pre_reboot_done", 2;
+    #barrier_create "client_pre_reboot_done", 2;
+    barrier_create "server_rebooted", 2;
 
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
@@ -74,17 +77,22 @@ sub run {
     assert_script_run "systemctl is-active sshd";
     barrier_wait "server_sshd_restarted";
 
-    # ждём, пока клиент завершит проверку SSH после рестарта службы (шаг 17)
-    barrier_wait "client_pre_reboot_done";
+    # waiting for the client to complete the SSH check after the service restart (step 17))
+    #barrier_wait "client_pre_reboot_done";
 
-    # # --- Шаг 18: перезагрузка сервера ---
-    # enter_cmd('reboot');
-    # $self->wait_boot;
-    # select_console('root-console');
+    # --- Step 18: Server reboot ---
+    enter_cmd('reboot');
+    assert_screen 'console-root', 720;
+    type_string 'root';
+    send_key 'ret';
+    wait_still_screen(3);
+    type_string $root_password;
+    send_key 'ret';
+    assert_screen 'console-root-access', 720;
 
-    # # --- Шаг 19: служба активна после ребута ---
-    # assert_script_run('systemctl is-active sshd');
-    # mutex_create('server_rebooted');
+    # --- Step 19: Service is active after reboot ---
+    assert_script_run('systemctl is-active sshd');
+    barrier_wait "server_rebooted";
 
     # mutex_wait('client_post_reboot_done');
 
