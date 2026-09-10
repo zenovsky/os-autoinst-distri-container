@@ -98,10 +98,19 @@ sub run {
     barrier_wait "client_post_reboot_done";
 
     # --- Step 21: checking/installing the package update ---
-    my $update_out = script_output('dnf check-update openssh; true');
-    if ($update_out !~ /no updates|nothing to do/i) {
+    # my $update_out = script_output('dnf check-update openssh; true');
+    # if ($update_out !~ /no updates|nothing to do/i) {
+    #     assert_script_run('dnf update -y openssh', timeout => 300);
+    # }
+    my $rc = script_run('dnf check-update openssh');
+    if ($rc == 100) {
+        # 100 = есть доступные обновления
         assert_script_run('dnf update -y openssh', timeout => 300);
     }
+    elsif ($rc != 0) {
+        die "dnf check-update failed with code $rc";
+    }
+    # rc == 0 — обновлений нет, ничего не делаем
 
     # --- Step 22: Service active after update ---
     assert_script_run "systemctl is-active sshd";
