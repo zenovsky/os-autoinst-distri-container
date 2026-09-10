@@ -105,7 +105,7 @@ sub run {
 
     # ---- Step 23: SSH session after package update on the server ---
     assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
-      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'"
+      . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
     # my $ok3 = script_output(
     #     "ssh -i $keyfile -o PasswordAuthentication=no "
     #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
