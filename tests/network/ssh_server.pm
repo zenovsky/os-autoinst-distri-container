@@ -98,10 +98,6 @@ sub run {
     barrier_wait "client_post_reboot_done";
 
     # --- Step 21: checking/installing the package update ---
-    # my $update_out = script_output('dnf check-update openssh; true');
-    # if ($update_out !~ /no updates|nothing to do/i) {
-    #     assert_script_run('dnf update -y openssh', timeout => 300);
-    # }
     my $rc = script_run('dnf check-update openssh');
     if ($rc == 100) {
         # 100 = есть доступные обновления
@@ -110,7 +106,6 @@ sub run {
     elsif ($rc != 0) {
         die "dnf check-update failed with code $rc";
     }
-    # rc == 0 — обновлений нет, ничего не делаем
 
     # --- Step 22: Service active after update ---
     assert_script_run "systemctl is-active sshd";
@@ -119,19 +114,17 @@ sub run {
     # waiting for the client to complete the SSH check after the openssh update (step 23))
     barrier_wait "client_final_checks_done";
 
-    # # --- Шаг 27: проверка логов на ошибки ---
-    # my $logs = script_output('journalctl -u sshd --no-pager -n 100');
-    # die "sshd logs contain errors:\n$logs"
-    #   if $logs =~ /Failed|fatal|error/i;
+    # --- Step 27: Checking logs for errors ---
+    my $logs = script_output('journalctl -u sshd --no-pager -n 100');
+    die "sshd logs contain errors:\n$logs"
+      if $logs =~ /Failed|fatal|error/i;
 
-    # # --- Шаг 28: общее состояние ОС ---
-    # assert_script_run('rpm -V openssh');
-    # assert_script_run('dnf check');
-    # assert_script_run("systemctl --failed | grep '0 loaded units listed'");
-    # assert_script_run("getenforce | grep 'Enforcing'");
-    # assert_script_run("ss -lntp | grep ':22'");
-
-    # mutex_create('server_done');
+    # --- Step 28: General status of the OS ---
+    assert_script_run('rpm -V openssh');
+    assert_script_run('dnf check');
+    assert_script_run("systemctl --failed | grep '0 loaded units listed'");
+    assert_script_run("getenforce | grep 'Enforcing'");
+    assert_script_run("ss -lntp | grep ':22'");
 }
 
 sub test_flags {

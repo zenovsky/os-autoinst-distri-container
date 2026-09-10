@@ -106,13 +106,6 @@ sub run {
     # ---- Step 23: SSH session after package update on the server ---
     assert_script_run "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
       . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
-    # my $ok3 = script_output(
-    #     "ssh -i $keyfile -o PasswordAuthentication=no "
-    #   . "-o StrictHostKeyChecking=no $test_user\@$server_ip "
-    #   . "'echo SSH_OK_AFTER_UPDATE'");
-    # die "SSH check failed after package update:\n$ok3"
-    #   unless $ok3 =~ /SSH_OK_AFTER_UPDATE/;
-
     barrier_wait "client_final_checks_done";
 }
 
