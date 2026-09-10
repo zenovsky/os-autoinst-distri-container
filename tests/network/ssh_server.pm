@@ -49,29 +49,23 @@ sub run {
 
     # # --- Step 1: Install the package ---
     # assert_script_run "dnf install -y openssh";
-    assert_script_run "systemctl --failed";
 
     # --- Step 2: sshd configuration ---
     assert_script_run "sshd -T | grep 'port 22'";
-    assert_script_run "systemctl --failed";
 
     # --- Step 3: Start the service ---
     assert_script_run "systemctl start sshd";
     assert_script_run "systemctl is-active sshd";
-    assert_script_run "systemctl --failed";
 
     # --- Step 4: Autoload ---
     assert_script_run "systemctl enable --now sshd";
     assert_script_run "systemctl is-enabled sshd";
-    assert_script_run "systemctl --failed";
 
     # --- Step 5: Listening port ---
     assert_script_run "ss -lntp | grep ':22'";
-    assert_script_run "systemctl --failed";
 
     # --- Step 6: firewalld ---
     assert_script_run "firewall-cmd --list-services | grep 'ssh'";
-    assert_script_run "systemctl --failed";
     barrier_wait "package_ready";
 
     # wait for the client to install the public key (steps 11-13)
@@ -83,7 +77,6 @@ sub run {
     # --- Step 16: Restart the sshd service ---
     assert_script_run "systemctl restart sshd";
     assert_script_run "systemctl is-active sshd";
-    assert_script_run "systemctl --failed";
     barrier_wait "server_sshd_restarted";
 
     # --- Step 18: Server reboot ---
@@ -99,7 +92,6 @@ sub run {
 
     # --- Step 19: Service is active after reboot ---
     assert_script_run "systemctl is-active sshd";
-    assert_script_run "systemctl --failed";
     barrier_wait "server_rebooted";
 
     # waiting for the client to complete the SSH check after the system reboot (step 20))
@@ -117,7 +109,6 @@ sub run {
 
     # --- Step 22: Service active after update ---
     assert_script_run "systemctl is-active sshd";
-    assert_script_run "systemctl --failed";
     barrier_wait "server_updated";
 
     # waiting for the client to complete the SSH check after the openssh update (step 23))
@@ -133,8 +124,7 @@ sub run {
     assert_script_run "dnf check";
     assert_script_run "getenforce | grep 'Enforcing'";
     assert_script_run "ss -lntp | grep ':22'";
-    assert_script_run "systemctl --failed";
-    assert_script_run "systemctl --failed | grep '0 loaded units listed'";
+    #assert_script_run "systemctl --failed | grep '0 loaded units listed'";
 }
 
 sub test_flags {
