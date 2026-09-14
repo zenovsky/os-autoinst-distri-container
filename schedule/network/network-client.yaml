@@ -1,7 +1,0 @@
-name: network-client
-description: >
-    Checking client-server network connectivity.
-schedule:
-  - tests/system/first_boot.pm
-  - tests/network/client.pm
-
