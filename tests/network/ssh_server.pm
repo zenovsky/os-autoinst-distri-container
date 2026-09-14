@@ -125,8 +125,7 @@ sub run {
     assert_script_run "getenforce | grep 'Enforcing'";
     assert_script_run "ss -lntp | grep ':22'";
     assert_script_run "cat /proc/cmdline";
-    assert_script_run "systemctl status kdump.service";
-    #assert_script_run "systemctl --failed | grep '0 loaded units listed'";
+    assert_script_run "systemctl --failed | grep '0 loaded units listed'";
 }
 
 sub test_flags {
