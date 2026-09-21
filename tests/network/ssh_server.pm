@@ -10,6 +10,7 @@ use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
 use mmapi;
+use utils;
 
 my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
 my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
@@ -80,15 +81,16 @@ sub run {
     barrier_wait "server_sshd_restarted";
 
     # --- Step 18: Server reboot ---
-    enter_cmd "reboot";
-    wait_still_screen(15);
-    assert_screen 'console-root', 720;
-    type_string 'root';
-    send_key 'ret';
-    wait_still_screen(3);
-    type_string $root_password;
-    send_key 'ret';
-    assert_screen 'console-root-access', 720;
+    # enter_cmd "reboot";
+    # wait_still_screen(15);
+    # assert_screen 'console-root', 720;
+    # type_string 'root';
+    # send_key 'ret';
+    # wait_still_screen(3);
+    # type_string $root_password;
+    # send_key 'ret';
+    # assert_screen 'console-root-access', 720;
+    reboot();
 
     # --- Step 19: Service is active after reboot ---
     assert_script_run "systemctl is-active sshd";
