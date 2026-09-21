@@ -11,6 +11,8 @@ use strict;
 
 our @EXPORT = qw(reboot);
 
+my $root_password = get_var('ROOT_PASSWORD', '12345678');
+
 # System reboot
 sub reboot {
     enter_cmd "reboot";

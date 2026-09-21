@@ -19,8 +19,6 @@ my $dns_ip = get_var('DNS_IP');
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
-my $root_password = get_var('ROOT_PASSWORD', '12345678');
-
 sub run {
     barrier_create "net_ready", 2;
     barrier_create "user_ready", 2;
