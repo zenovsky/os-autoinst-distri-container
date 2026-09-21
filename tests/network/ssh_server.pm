@@ -90,7 +90,7 @@ sub run {
     # type_string $root_password;
     # send_key 'ret';
     # assert_screen 'console-root-access', 720;
-    reboot();
+    reboot_now();
 
     # --- Step 19: Service is active after reboot ---
     assert_script_run "systemctl is-active sshd";
