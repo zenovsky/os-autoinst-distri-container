@@ -9,7 +9,11 @@ use autotest;
 use warnings;
 use strict;
 
-our @EXPORT = qw(reboot);
+our @EXPORT = qw(
+    reboot
+
+    
+);
 
 my $root_password = get_var('ROOT_PASSWORD', '12345678');
 
@@ -24,7 +28,28 @@ sub reboot {
     type_string $root_password;
     send_key 'ret';
     assert_screen 'console-root-access', 720;
+}
 
+sub click_and_wait {
+    my ($button, $wait_time) = @_;
+    assert_and_click($button);
+    wait_still_screen($wait_time // 1);
+}
+
+sub click_right_and_wait {
+    my ($button, $wait_time) = @_;
+    assert_and_click($button, button => 'right');
+    wait_still_screen($wait_time // 1);
+}
+
+sub send_key_and_wait {
+    my ($key, $wait_time) = @_;
+    send_key($key, wait_screen_change => $wait_time // 5);
+}
+
+sub type_safely {
+    my $string = shift;
+    type_string($string, wait_screen_change => 3, max_interval => 20, wait_still_screen => 2, similarity_level => 38);
 }
 
 1;
