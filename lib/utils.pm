@@ -3,6 +3,7 @@ package utils;
 use base Exporter;
 use Exporter;
 use Mojo::Base -strict;
+use Mojo::Base 'basetest';
 use testapi;
 use autotest;
 use warnings;
