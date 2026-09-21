@@ -9,10 +9,10 @@ use autotest;
 use warnings;
 use strict;
 
-our @EXPORT = qw(reboot_now) 
+our @EXPORT = qw(reboot);
 
 # System reboot
-sub reboot_now {
+sub reboot {
     enter_cmd "reboot";
     wait_still_screen(15);
     assert_screen 'console-root', 720;
