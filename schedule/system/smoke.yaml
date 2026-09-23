@@ -3,6 +3,7 @@ description: >
     Basic smoke tests of the image.
 schedule:
   - tests/system/first_boot.pm
+  - tests/packages/packages_list.pm
   - tests/system/os_release.pm
   - tests/system/kernel.pm
   - tests/system/systemd.pm
