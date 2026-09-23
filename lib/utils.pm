@@ -11,7 +11,10 @@ use strict;
 
 our @EXPORT = qw(
     reboot
-
+    click_and_wait
+    click_right_and_wait
+    send_key_and_wait
+    type_safely
     
 );
 
