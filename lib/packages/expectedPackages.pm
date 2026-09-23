@@ -1,11 +1,11 @@
-package expectedPackages
+package expectedPackages;
 
 use Mojo::Base -strict;
 use testapi;
 use autotest;
 
 
-my @package_release = (
+my @packages_release = (
     'libgcc',
     'tzdata',
     'linux-firmware-whence',
