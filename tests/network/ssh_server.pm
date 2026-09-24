@@ -29,14 +29,14 @@ sub sync_step {
 sub run {
     barrier_create "net_ready", 2;
     barrier_create "user_ready", 2;
-    barrier_create "package_ready", 2;
-    barrier_create "client_key_installed", 2;
-    barrier_create "client_key_checks_done", 2;
-    barrier_create "server_sshd_restarted", 2;
-    barrier_create "server_rebooted", 2;
-    barrier_create "client_post_reboot_done", 2;
-    barrier_create "server_updated", 2;
-    barrier_create "client_final_checks_done", 2;
+    # barrier_create "package_ready", 2;
+    # # barrier_create "client_key_installed", 2;
+    # # barrier_create "client_key_checks_done", 2;
+    # # barrier_create "server_sshd_restarted", 2;
+    # # barrier_create "server_rebooted", 2;
+    # # barrier_create "client_post_reboot_done", 2;
+    # # barrier_create "server_updated", 2;
+    # # barrier_create "client_final_checks_done", 2;
  
     # --- Preconditions ---
     step 'P1. Network setup' => sub {
@@ -49,7 +49,7 @@ sub run {
     sync_step "net_ready";
  
     step 'P2. Ping client' => sub {
-        assert_script_run "ping -c 4 123";
+        assert_script_run "ping -c 4 $client_ip";
     };
  
     step 'P3. Create test user' => sub {
