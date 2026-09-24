@@ -49,7 +49,7 @@ sub run {
     sync_step "net_ready";
  
     step 'P2. Ping client' => sub {
-        assert_script_run "ping -c 4 $client_ip";
+        assert_script_run "ping -c 4 123";
     };
  
     step 'P3. Create test user' => sub {
