@@ -19,6 +19,7 @@ my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
 
 sub run {
+    record_info "PRECONDITION";
     # --- Preconditions ---
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
       . "ipv4.addresses $client_ip/15 ipv4.gateway 172.16.2.2 "

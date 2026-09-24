@@ -32,6 +32,7 @@ sub run {
     barrier_create "client_final_checks_done", 2;
 
     # --- Preconditions ---
+    record_info "PRECONDITION";
     assert_script_run "nmcli con add type ethernet ifname ens4 con-name ens4-static "
         . "ipv4.addresses $server_ip/15 ipv4.gateway 172.16.2.2 "
         . "ipv4.dns $dns_ip ipv4.method manual";
