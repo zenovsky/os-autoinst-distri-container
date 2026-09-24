@@ -13,6 +13,13 @@ use mmapi;
 use utils;
 use network::ssh;
 
+my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
+my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
+my $dns_ip = get_var('DNS_IP');
+
+my $test_user = get_var('SSH_USER', 'ssh_test_user');
+my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
+
 sub run {
     barrier_create "net_ready", 2;
     barrier_create "user_ready", 2;
