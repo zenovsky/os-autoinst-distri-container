@@ -47,7 +47,7 @@ sub run {
 
     # --- Step 2: sshd configuration ---
     step 'Step 2. sshd configuration' => sub {
-        run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 23'";
+        run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 22'";
     };
 
     # --- Step 3: Start the service ---
@@ -104,7 +104,7 @@ sub run {
         run_cmd "Generating an ed25519 key pair ~/.ssh/id_ed25519_test without a passphrase" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
         run_cmd "Checking that the private and public key files exist" =>
-          "ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub";
+          "ls -l ~/.ssh/id_ed25519_test_TEST ~/.ssh/id_ed25519_test.pub";
     };
 
     # --- Step 10: Installing the public key on the server ---
