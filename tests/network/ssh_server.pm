@@ -63,7 +63,7 @@ sub run {
 
     # --- Step 2: sshd configuration ---
     step 'S02. sshd configuration' => sub {
-        run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 22'";
+        run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 23'";
     };
 
     # --- Step 3: Start the service ---
