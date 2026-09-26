@@ -94,7 +94,7 @@ sub run {
         assert_screen 'whoami-is-test-user', 30;
         step_log "Printing \$HOME and expecting the home directory of $test_user";
         type_string "echo \"\$HOME\"\n";
-        assert_screen 'home-is-test-user-dir_TEST', 30;
+        assert_screen 'home-is-test-user-dir', 30;
         step_log "Closing the SSH session";
         enter_cmd 'exit';
     };
