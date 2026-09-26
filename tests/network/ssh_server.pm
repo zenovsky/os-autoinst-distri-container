@@ -115,18 +115,32 @@ sub run {
     barrier_wait "server_rebooted";
     barrier_wait "client_post_reboot_done";
 
+    # # --- Step 10: checking/installing the package update ---
+    # step 'Step 10. Check and install the package update' => sub {
+    #     step_log "Checking for an openssh update (dnf check-update)";
+    #     my $rc = script_run("dnf check-update openssh", timeout => 300) // -1;
+    #     step_log "dnf check-update finished with exit code $rc (0 = up to date, 100 = update available, -1 = timeout)";
+    #     if ($rc == 100) {
+    #         run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300;
+    #     }
+    #     elsif ($rc != 0) {
+    #         die "dnf check-update failed with code $rc";
+    #     }
+    # };
+
     # --- Step 10: checking/installing the package update ---
     step 'Step 10. Check and install the package update' => sub {
-        step_log "Checking for an openssh update (dnf check-update)";
-        my $rc = script_run("dnf check-update openssh", timeout => 300) // -1;
-        step_log "dnf check-update finished with exit code $rc (0 = up to date, 100 = update available, -1 = timeout)";
+        # 0 = обновлений нет, 100 = есть обновление, остальное = ошибка.
+        # probe_cmd не падает сама на 100 и всегда кладёт код возврата и вывод dnf в журнал шага,
+        # так что видно, почему тест решил, что обновлений нет или они есть.
+        my ($rc, $out) = probe_cmd "Checking for an openssh update (dnf check-update)" => "dnf check-update openssh", timeout => 300;
         if ($rc == 100) {
             run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300;
         }
         elsif ($rc != 0) {
-            die "dnf check-update failed with code $rc";
+            die "dnf check-update failed with exit code $rc:\n$out";
         }
-    };
+    };    
 
     # --- Step 11: Service active after update ---
     step 'Step 11. Service is active after update' => sub {
