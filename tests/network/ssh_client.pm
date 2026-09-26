@@ -120,7 +120,7 @@ sub run {
     # --- Step 14: Connecting via Public Key ---
     step 'S14. Connect with the public key' => sub {
         run_cmd "Logging in to $test_user\@$server_ip with the key (password authentication disabled) and running whoami" =>
-          "ssh -i ~/.ssh/id_ed25519_test_TEST -o PasswordAuthentication=no "
+          "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'";
     };
 
