@@ -23,7 +23,7 @@ sub run {
     add_step_secret($test_pass);
 
     # --- Preconditions ---
-    step 'P1. Network setup' => sub {
+    step 'Preconditions. Network setup' => sub {
         run_cmd "Adding static connection ens4-static ($client_ip/15, gateway 172.16.2.2, DNS $dns_ip)" =>
           "nmcli con add type ethernet ifname ens4 con-name ens4-static "
           . "ipv4.addresses $client_ip/15 ipv4.gateway 172.16.2.2 "
@@ -31,55 +31,57 @@ sub run {
         run_cmd "Activating connection ens4-static" => "nmcli con up ens4-static";
         run_cmd "Setting nameserver $dns_ip in /etc/resolv.conf" => "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     };
+
     barrier_wait "net_ready";
 
-    step 'P2. Ping server' => sub {
+    step 'Preconditions. Ping server' => sub {
         run_cmd "Checking connectivity to the server $server_ip (4 ICMP echo requests)" => "ping -c 4 $server_ip";
     };
 
     barrier_wait "user_ready";
 
     # --- Step 1: Install the package ---
-    step 'S01. Install the package' => sub {
+    step 'Step 1. Install the package' => sub {
         run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300;
     };
 
     # --- Step 2: sshd configuration ---
-    step 'S02. sshd configuration' => sub {
+    step 'Step 2. sshd configuration' => sub {
         run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 22'";
     };
 
     # --- Step 3: Start the service ---
-    step 'S03. Start the service' => sub {
+    step 'Step 3. Start the service' => sub {
         run_cmd "Starting the sshd service" => "systemctl start sshd";
         run_cmd "Checking that the sshd service is active" => "systemctl is-active sshd";
     };
 
     # --- Step 4: Autoload ---
-    step 'S04. Autoload' => sub {
+    step 'Step 4. Autoload' => sub {
         run_cmd "Enabling the sshd service at boot and starting it now" => "systemctl enable --now sshd";
         run_cmd "Checking that the sshd service is enabled" => "systemctl is-enabled sshd";
     };
 
     # --- Step 5: Listening port ---
-    step 'S05. Listening port' => sub {
+    step 'Step 5. Listening port' => sub {
         run_cmd "Checking that something listens on TCP port 22" => "ss -lntp | grep ':22'";
     };
 
     # --- Step 6: firewalld ---
-    step 'S06. firewalld' => sub {
+    step 'Step 6. firewalld' => sub {
         run_cmd "Checking that firewalld allows the ssh service" => "firewall-cmd --list-services | grep 'ssh'";
     };
+
     barrier_wait "package_ready";
 
     # --- Step 7: Make sure port 22 is available on the server---
-    step 'S07. Port 22 is available on the server' => sub {
+    step 'Step 7. Port 22 is available on the server' => sub {
         run_cmd "Scanning $server_ip:22 and looking for the OpenSSH banner" =>
           "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
     };
 
-    # --- Steps 8-10: Connecting with a password ---
-    step 'S08-10. Connect with a password' => sub {
+    # --- Step 8: Connecting with a password ---
+    step 'Step 8. Connect with a password' => sub {
         step_log "Opening an SSH session to $test_user\@$server_ip";
         type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
         step_log "Waiting for the password prompt";
@@ -97,16 +99,16 @@ sub run {
         enter_cmd 'exit';
     };
 
-    # --- Step 11: Generate a key ---
-    step 'S11. Generate a key' => sub {
+    # --- Step 9: Generate a key ---
+    step 'Step 9. Generate a key' => sub {
         run_cmd "Generating an ed25519 key pair ~/.ssh/id_ed25519_test without a passphrase" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
         run_cmd "Checking that the private and public key files exist" =>
           "ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub";
     };
 
-    # --- Steps 12-13: Installing the public key on the server ---
-    step 'S12-13. Install the public key on the server' => sub {
+    # --- Step 10: Installing the public key on the server ---
+    step 'Step 10. Install the public key on the server' => sub {
         step_log "Copying the public key to $test_user\@$server_ip with ssh-copy-id";
         type_string "ssh-copy-id -i ~/.ssh/id_ed25519_test.pub $test_user\@$server_ip\n";
         step_log "Waiting for the password prompt";
@@ -115,53 +117,54 @@ sub run {
         type_string "$test_pass\n";
         wait_still_screen(3);
     };
+
     barrier_wait "client_key_installed";
 
-    # --- Step 14: Connecting via Public Key ---
-    step 'S14. Connect with the public key' => sub {
+    # --- Step 11: Connecting via Public Key ---
+    step 'Step 11. Connect with the public key' => sub {
         run_cmd "Logging in to $test_user\@$server_ip with the key (password authentication disabled) and running whoami" =>
           "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'";
     };
 
-    # --- Step 15: Connection with an invalid key should be rejected ---
-    step 'S15. Invalid key is rejected' => sub {
+    # --- Step 12: Connection with an invalid key should be rejected ---
+    step 'Step 12. Invalid key is rejected' => sub {
         run_cmd "Generating a second key pair that is not installed on the server" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
         run_cmd "Trying to log in with the wrong key and expecting 'Permission denied'" =>
           "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
     };
-    barrier_wait "client_key_checks_done";
 
-    # We wait for the server to restart sshd (step 16).
+    barrier_wait "client_key_checks_done";
     barrier_wait "server_sshd_restarted";
 
-    # --- Step 17: Verifying SSH after restarting the service ---
-    step 'S17. SSH works after the service restart' => sub {
+    # --- Step 13: Verifying SSH after restarting the service ---
+    step 'Step 13. SSH works after the service restart' => sub {
         run_cmd "Logging in with the key after the sshd restart on the server" =>
           "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
     };
+
     barrier_wait "server_rebooted";
 
-    # --- Step 20: Verifying SSH after system reboot ---
-    step 'S20. SSH works after the system reboot' => sub {
+    # --- Step 14: Verifying SSH after system reboot ---
+    step 'Step 14. SSH works after the system reboot' => sub {
         run_cmd "Logging in with the key after the server reboot" =>
           "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_REBOOT'";
     };
-    barrier_wait "client_post_reboot_done";
 
-    # We wait for the server to update sshd (step 21).
+    barrier_wait "client_post_reboot_done";
     barrier_wait "server_updated";
 
-    # ---- Step 23: SSH session after package update on the server ---
-    step 'S23. SSH works after the package update' => sub {
+    # ---- Step 15: SSH session after package update on the server ---
+    step 'Step 15. SSH works after the package update' => sub {
         run_cmd "Logging in with the key after the openssh update on the server" =>
           "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
     };
+    
     barrier_wait "client_final_checks_done";
 }
 

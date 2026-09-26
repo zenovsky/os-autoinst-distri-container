@@ -35,7 +35,7 @@ sub run {
     barrier_create "client_final_checks_done", 2;
 
     # --- Preconditions ---
-    step 'P1. Network setup' => sub {
+    step 'Precondition. Network setup' => sub {
         run_cmd "Adding static connection ens4-static ($server_ip/15, gateway 172.16.2.2, DNS $dns_ip)" =>
           "nmcli con add type ethernet ifname ens4 con-name ens4-static "
           . "ipv4.addresses $server_ip/15 ipv4.gateway 172.16.2.2 "
@@ -43,87 +43,84 @@ sub run {
         run_cmd "Activating connection ens4-static" => "nmcli con up ens4-static";
         run_cmd "Setting nameserver $dns_ip in /etc/resolv.conf" => "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     };
+
     barrier_wait "net_ready";
 
-    step 'P2. Ping client' => sub {
+    step 'Precondition. Ping client' => sub {
         run_cmd "Checking connectivity to the client $client_ip (4 ICMP echo requests)" => "ping -c 4 $client_ip";
     };
 
-    step 'P3. Create test user' => sub {
+    step 'Precondition. Create test user' => sub {
         run_cmd "Creating user $test_user with shell /bin/bash" => "useradd -m -s /bin/bash $test_user";
         run_cmd "Setting the password for $test_user" => "echo '$test_user:$test_pass' | chpasswd";
         run_cmd "Opening permissions on /dev/ttyS0 (chmod 777)" => "chmod 777 /dev/ttyS0";
     };
+
     barrier_wait "user_ready";
 
     # --- Step 1: Install the package ---
-    step 'S01. Install the package' => sub {
+    step 'Step 1. Install the package' => sub {
         run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300;
     };
 
     # --- Step 2: sshd configuration ---
-    step 'S02. sshd configuration' => sub {
+    step 'Step 2. sshd configuration' => sub {
         run_cmd "Checking that the effective sshd configuration uses port 22" => "sshd -T | grep 'port 22'";
     };
 
     # --- Step 3: Start the service ---
-    step 'S03. Start the service' => sub {
+    step 'Step 3. Start the service' => sub {
         run_cmd "Starting the sshd service" => "systemctl start sshd";
         run_cmd "Checking that the sshd service is active" => "systemctl is-active sshd";
     };
 
     # --- Step 4: Autoload ---
-    step 'S04. Autoload' => sub {
+    step 'Step 4. Autoload' => sub {
         run_cmd "Enabling the sshd service at boot and starting it now" => "systemctl enable --now sshd";
         run_cmd "Checking that the sshd service is enabled" => "systemctl is-enabled sshd";
     };
 
     # --- Step 5: Listening port ---
-    step 'S05. Listening port' => sub {
+    step 'Step 5. Listening port' => sub {
         run_cmd "Checking that something listens on TCP port 22" => "ss -lntp | grep ':22'";
     };
 
     # --- Step 6: firewalld ---
-    step 'S06. firewalld' => sub {
+    step 'Step 6. firewalld' => sub {
         run_cmd "Checking that firewalld allows the ssh service" => "firewall-cmd --list-services | grep 'ssh'";
     };
+
     barrier_wait "package_ready";
-
-    # wait for the client to install the public key (steps 11-13)
     barrier_wait "client_key_installed";
-
-    # We wait until the client checks the login using the correct/incorrect key (steps 14-15)
     barrier_wait "client_key_checks_done";
 
-    # --- Step 16: Restart the sshd service ---
-    step 'S16. Restart the sshd service' => sub {
+    # --- Step 7: Restart the sshd service ---
+    step 'Step 7. Restart the sshd service' => sub {
         run_cmd "Restarting the sshd service" => "systemctl restart sshd";
         run_cmd "Checking that the sshd service is active after the restart" => "systemctl is-active sshd";
     };
     barrier_wait "server_sshd_restarted";
 
-    # --- Step 18: Server reboot ---
-    step 'S18. Server reboot' => sub {
+    # --- Step 8: Server reboot ---
+    step 'Step 8. Server reboot' => sub {
         step_log "Rebooting the server and waiting for the console login";
         reboot();
     };
 
-    # --- Step 19: Service is active after reboot ---
-    step 'S19. Service is active after reboot' => sub {
+    # --- Step 9: Service is active after reboot ---
+    step 'Step 9. Service is active after reboot' => sub {
         run_cmd "Checking that the sshd service is active after the reboot" => "systemctl is-active sshd";
     };
-    barrier_wait "server_rebooted";
 
-    # waiting for the client to complete the SSH check after the system reboot (step 20))
+    barrier_wait "server_rebooted";
     barrier_wait "client_post_reboot_done";
 
-    # --- Step 21: checking/installing the package update ---
-    step 'S21. Check and install the package update' => sub {
+    # --- Step 10: checking/installing the package update ---
+    step 'Step 10. Check and install the package update' => sub {
         step_log "Checking for an openssh update (dnf check-update)";
         my $rc = script_run("dnf check-update openssh", timeout => 300) // -1;
         step_log "dnf check-update finished with exit code $rc (0 = up to date, 100 = update available, -1 = timeout)";
         if ($rc == 100) {
-            # 100 = есть доступные обновления
             run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300;
         }
         elsif ($rc != 0) {
@@ -131,17 +128,16 @@ sub run {
         }
     };
 
-    # --- Step 22: Service active after update ---
-    step 'S22. Service is active after update' => sub {
+    # --- Step 11: Service active after update ---
+    step 'Step 11. Service is active after update' => sub {
         run_cmd "Checking that the sshd service is active after the update" => "systemctl is-active sshd";
     };
-    barrier_wait "server_updated";
 
-    # waiting for the client to complete the SSH check after the openssh update (step 23))
+    barrier_wait "server_updated";
     barrier_wait "client_final_checks_done";
 
-    # --- Step 27: Checking logs for errors ---
-    step 'S27. Check logs for errors' => sub {
+    # --- Step 12: Checking logs for errors ---
+    step 'Step 12. Check logs for errors' => sub {
         step_log "Reading the last 100 lines of the sshd journal";
         my $logs = script_output "journalctl -u sshd --no-pager -n 100";
         step_log "Checking the journal for 'Failed', 'fatal' or 'error' entries";
@@ -149,8 +145,8 @@ sub run {
           if $logs =~ /Failed|fatal|error/i;
     };
 
-    # --- Step 28: General status of the OS ---
-    step 'S28. General status of the OS' => sub {
+    # --- Step 13: General status of the OS ---
+    step 'Step 13. General status of the OS' => sub {
         run_cmd "Verifying the openssh package files (rpm -V)" => "rpm -V openssh";
         run_cmd "Checking the package database consistency (dnf check)" => "dnf check";
         run_cmd "Checking that SELinux is in Enforcing mode" => "getenforce | grep 'Enforcing'";
@@ -160,7 +156,7 @@ sub run {
     };
 }
 
-# Отчёт пишется и при успехе, и при падении.
+# A report is written whether there is success or failure.
 sub post_fail_hook { write_step_report('ssh_server', failed => 1) }
 sub post_run_hook  { write_step_report('ssh_server') }
 
