@@ -94,7 +94,7 @@ sub run {
         assert_screen 'whoami-is-test-user', 30;
         step_log "Printing \$HOME and expecting the home directory of $test_user";
         type_string "echo \"\$HOME\"\n";
-        assert_screen 'home-is-test-user-dir', 30;
+        assert_screen 'home-is-test-user-dir_TEST', 30;
         step_log "Closing the SSH session";
         enter_cmd 'exit';
     };
@@ -104,7 +104,7 @@ sub run {
         run_cmd "Generating an ed25519 key pair ~/.ssh/id_ed25519_test without a passphrase" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ''";
         run_cmd "Checking that the private and public key files exist" =>
-          "ls -l ~/.ssh/id_ed25519_test_TEST ~/.ssh/id_ed25519_test.pub";
+          "ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub";
     };
 
     # --- Step 10: Installing the public key on the server ---
