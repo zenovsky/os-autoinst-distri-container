@@ -120,7 +120,7 @@ sub run {
     # --- Step 14: Connecting via Public Key ---
     step 'S14. Connect with the public key' => sub {
         run_cmd "Logging in to $test_user\@$server_ip with the key (password authentication disabled) and running whoami" =>
-          "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
+          "ssh -i ~/.ssh/id_ed25519_test_TEST -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'";
     };
 
@@ -129,7 +129,7 @@ sub run {
         run_cmd "Generating a second key pair that is not installed on the server" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
         run_cmd "Trying to log in with the wrong key and expecting 'Permission denied'" =>
-          "ssh -i ~/.ssh/id_ed25519_wrongTEST -o PasswordAuthentication=no "
+          "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
     };
     barrier_wait "client_key_checks_done";
