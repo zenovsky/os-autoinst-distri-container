@@ -130,17 +130,14 @@ sub run {
 
     # --- Step 10: checking/installing the package update ---
     step 'Step 10. Check and install the package update' => sub {
-        # 0 = обновлений нет, 100 = есть обновление, остальное = ошибка.
-        # probe_cmd не падает сама на 100 и всегда кладёт код возврата и вывод dnf в журнал шага,
-        # так что видно, почему тест решил, что обновлений нет или они есть.
         my ($rc, $out) = probe_cmd "Checking for an openssh update (dnf check-update)" => "dnf check-update openssh", timeout => 300;
         if ($rc == 100) {
-            run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300;
+            run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300, quiet => 1;
         }
         elsif ($rc != 0) {
             die "dnf check-update failed with exit code $rc:\n$out";
         }
-    };    
+    }; 
 
     # --- Step 11: Service active after update ---
     step 'Step 11. Service is active after update' => sub {
@@ -161,7 +158,7 @@ sub run {
 
     # --- Step 13: General status of the OS ---
     step 'Step 13. General status of the OS' => sub {
-        run_cmd "Verifying the openssh package files (rpm -V)" => "rpm -V openssh";
+        run_cmd "Verifying the openssh package files (rpm -V)" => "rpm -V openssh", quiet => 1;
         run_cmd "Checking the package database consistency (dnf check)" => "dnf check";
         run_cmd "Checking that SELinux is in Enforcing mode" => "getenforce | grep 'Enforcing'";
         run_cmd "Checking that port 22 is still listening" => "ss -lntp | grep ':22'";
