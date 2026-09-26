@@ -92,7 +92,7 @@ sub run {
         assert_screen 'whoami-is-test-user', 30;
         step_log "Printing \$HOME and expecting the home directory of $test_user";
         type_string "echo \"\$HOME\"\n";
-        assert_screen 'home-is-test-user-dir_TEST', 30;
+        assert_screen 'home-is-test-user-dir', 30;
         step_log "Closing the SSH session";
         enter_cmd 'exit';
     };
@@ -129,7 +129,7 @@ sub run {
         run_cmd "Generating a second key pair that is not installed on the server" =>
           "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ''";
         run_cmd "Trying to log in with the wrong key and expecting 'Permission denied'" =>
-          "ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no "
+          "ssh -i ~/.ssh/id_ed25519_wrongTEST -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
     };
     barrier_wait "client_key_checks_done";
