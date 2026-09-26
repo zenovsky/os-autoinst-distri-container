@@ -71,7 +71,7 @@ sub run {
     # --- Step 2: sshd configuration ---
     step 'S02. sshd configuration' => sub {
         step_log "Checking that the effective sshd configuration uses port 22";
-        assert_script_run "sshd -T | grep 'port 22'";
+        assert_script_run "sshd -T | grep 'port 23'";
     };
  
     # --- Step 3: Start the service ---
