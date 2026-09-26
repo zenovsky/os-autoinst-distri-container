@@ -42,7 +42,7 @@ sub run {
 
     # --- Step 1: Install the package ---
     step 'Step 1. Install the package' => sub {
-        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300;
+        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300, quiet => 1;
     };
 
     # --- Step 2: sshd configuration ---
@@ -164,7 +164,7 @@ sub run {
           "ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no "
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
     };
-    
+
     barrier_wait "client_final_checks_done";
 }
 

@@ -60,7 +60,7 @@ sub run {
 
     # --- Step 1: Install the package ---
     step 'Step 1. Install the package' => sub {
-        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300;
+        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300, quiet => 1;
     };
 
     # --- Step 2: sshd configuration ---
@@ -114,19 +114,6 @@ sub run {
 
     barrier_wait "server_rebooted";
     barrier_wait "client_post_reboot_done";
-
-    # # --- Step 10: checking/installing the package update ---
-    # step 'Step 10. Check and install the package update' => sub {
-    #     step_log "Checking for an openssh update (dnf check-update)";
-    #     my $rc = script_run("dnf check-update openssh", timeout => 300) // -1;
-    #     step_log "dnf check-update finished with exit code $rc (0 = up to date, 100 = update available, -1 = timeout)";
-    #     if ($rc == 100) {
-    #         run_cmd "An update is available, installing it with dnf update" => "dnf update -y openssh", timeout => 300;
-    #     }
-    #     elsif ($rc != 0) {
-    #         die "dnf check-update failed with code $rc";
-    #     }
-    # };
 
     # --- Step 10: checking/installing the package update ---
     step 'Step 10. Check and install the package update' => sub {
