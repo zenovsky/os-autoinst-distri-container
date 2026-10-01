@@ -9,7 +9,7 @@ sub run {
     add_step_secret($root_password);
 
     step 'System has started up' => sub {
-        step_log "System has booted up and the console is ready for use";
+        step_log "System has booted up and console is ready for use";
         assert_screen 'console-root', 720;
     };
     
