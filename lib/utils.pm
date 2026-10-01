@@ -11,6 +11,8 @@ use strict;
 
 our @EXPORT = qw(
     reboot
+    login_as_root
+    poweroff
     click_and_wait
     click_right_and_wait
     send_key_and_wait
@@ -19,6 +21,16 @@ our @EXPORT = qw(
 );
 
 my $root_password = get_var('ROOT_PASSWORD', '12345678');
+
+# Root login
+sub login_as_root {
+    type_string 'root';
+    send_key 'ret';
+    wait_still_screen(3);
+    type_string $root_password;
+    send_key 'ret';
+    assert_screen 'console-root-access', 720
+}
 
 # System reboot
 sub reboot {
@@ -31,6 +43,14 @@ sub reboot {
     type_string $root_password;
     send_key 'ret';
     assert_screen 'console-root-access', 720;
+}
+
+# Poweroff system
+sub poweroff {
+    type_string 'poweroff';
+    send_key 'ret';
+    wait_still_screen(30);
+    assert_screen 'poweroff-success', 120; 
 }
 
 # Left-click and wait
