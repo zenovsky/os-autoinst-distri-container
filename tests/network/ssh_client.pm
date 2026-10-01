@@ -42,7 +42,7 @@ sub run {
 
     # --- Step 1: Install the package opennsh ---
     step 'Step 1. Install the package openssh' => sub {
-        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300, quiet => 1;
+        run_cmd "Installing the openssh package with dnf" => "dnf install -y openssh", timeout => 300;
     };
 
     # --- Step 2: sshd port configuration ---
