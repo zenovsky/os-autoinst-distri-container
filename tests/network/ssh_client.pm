@@ -168,7 +168,7 @@ sub run {
     barrier_wait "client_final_checks_done";
 }
 
-sub post_fail_hook { write_step_report('ssh_client', failed => 1) }
-sub post_run_hook  { write_step_report('ssh_client') }
+sub post_fail_hook { write_step_report('openssh-client', failed => 1) }
+sub post_run_hook  { write_step_report('openssh-client') }
 
 1;

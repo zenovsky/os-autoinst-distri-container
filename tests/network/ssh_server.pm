@@ -147,7 +147,7 @@ sub run {
     };
 }
 
-sub post_fail_hook { write_step_report('ssh_server', failed => 1) }
-sub post_run_hook  { write_step_report('ssh_server') }
+sub post_fail_hook { write_step_report('openssh-server', failed => 1) }
+sub post_run_hook  { write_step_report('openssh-server') }
 
 1;
