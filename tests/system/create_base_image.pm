@@ -15,7 +15,7 @@ sub run {
 
 }
 
-sub post_fail_hook { write_step_report('ssh_client', failed => 1) }
-sub post_run_hook  { write_step_report('ssh_client') }
+sub post_fail_hook { write_step_report('Create base image', failed => 1) }
+sub post_run_hook  { write_step_report('Create base image') }
 
 1;
