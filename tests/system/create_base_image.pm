@@ -4,7 +4,7 @@ use StepReport;
 
 my $distri = get_var('DISTRI');
 my $version = get_var('VERSION');
-my %build = get_var('BUILD');
+my $build = get_var('BUILD');
 my $arch = get_var('ARCH');
 
 sub run {
