@@ -6,8 +6,6 @@ use Mojo::Base -strict;
 use Mojo::Base 'basetest';
 use testapi;
 use autotest;
-use warnings;
-use strict;
 
 our @EXPORT = qw(
     reboot
@@ -34,7 +32,7 @@ sub login_as_root {
 
 # System reboot
 sub reboot {
-    enter_cmd "reboot";
+    enter_cmd 'reboot';
     wait_still_screen(15);
     assert_screen 'console-root', 720;
     type_string 'root';

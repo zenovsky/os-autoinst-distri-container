@@ -4,8 +4,8 @@ use utils;
 use StepReport;
 
 sub run {
-    step "Poweroff system" => sub {
-        step_log "System shutdown";
+    step 'Poweroff system' => sub {
+        step_log 'System shutdown';
         poweroff();
     };
 
