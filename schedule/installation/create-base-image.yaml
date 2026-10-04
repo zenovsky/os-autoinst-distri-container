@@ -5,3 +5,4 @@ schedule:
     - tests/installation/kickstart_install.pm
     - tests/system/first_boot.pm
     - tests/system/poweroff.pm
+    - tests/system/create_base_image.pm
