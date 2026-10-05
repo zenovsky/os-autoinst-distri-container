@@ -2,12 +2,6 @@ name: network-client
 description: >
     Checking OpenSSH client-server connectivity.
 vars:
-    SSH_SERVER_IP:
-    SSH_CLIENT_IP:
-    SSH_USER:
-    SSH_USER_PASSWORD:
-    SSH_KEY_PATH:    
 schedule:
   - tests/system/first_boot.pm
   - tests/network/ssh_client.pm
-

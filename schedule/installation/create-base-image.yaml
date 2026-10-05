@@ -2,7 +2,7 @@ name: create-base-image
 description: >
     Build base qcow2 image via kickstart installation and first boot.
 schedule:
-    - tests/installation/kickstart_install.pm
-    - tests/system/first_boot.pm
-    - tests/system/poweroff.pm
-    - tests/system/create_base_image.pm
+  - tests/installation/kickstart_install.pm
+  - tests/system/first_boot.pm
+  - tests/system/poweroff.pm
+  - tests/system/create_base_image.pm

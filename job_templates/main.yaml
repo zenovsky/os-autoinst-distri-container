@@ -20,7 +20,7 @@ scenarios:
             QEMURAM: '2048'
             HDDSIZEGB: '20'
             PUBLISH_HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
-            
+
       - smoke:
           settings:
             YAML_SCHEDULE: schedule/system/smoke.yaml
@@ -50,4 +50,4 @@ scenarios:
             QEMURAM: '2048'
             BOOT_HDD_IMAGE: '1'
             HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
-            PARALLEL_WITH: openssh-server             
+            PARALLEL_WITH: openssh-server
