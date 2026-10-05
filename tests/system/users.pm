@@ -52,7 +52,7 @@ sub run {
     );
 
     die "Unexpected username: $whoami\n"
-        unless $whoami eq $username;
+      unless $whoami eq $username;
 
     # Remove test user
     assert_script_run(

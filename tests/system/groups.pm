@@ -3,7 +3,7 @@ use testapi;
 
 sub run {
     my $groupname = 'openqa_test_group';
-    my $username  = 'openqa_group_test';
+    my $username = 'openqa_group_test';
 
     # Create test group
     assert_script_run(

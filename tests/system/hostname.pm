@@ -12,7 +12,7 @@ sub run {
     );
 
     die "Hostname is empty\n"
-        unless length $hostname;
+      unless length $hostname;
 
     assert_script_run(
         'hostnamectl --static',

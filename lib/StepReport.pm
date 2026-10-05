@@ -30,14 +30,14 @@ use testapi;
 
 our @EXPORT = qw(step step_log run_cmd probe_cmd write_step_report add_step_secret);
 
-my @STEPS;                        # шаги текущего job'а (живут в памяти isotovideo)
-my $CURRENT;                      # запись выполняющегося шага
-my @SECRETS;                      # значения, которые нельзя выводить в отчёт
-my $LOG             = 'autoinst-log.txt';
-my $MAX_LOG_LINES   = 80;
-my $MAX_TEXT_CHARS  = 20000;
-my $MAX_CMD_OUTPUT  = 4000;
-my $CMD_TIMEOUT     = 90;         # значение по умолчанию для run_cmd, как у assert_script_run
+my @STEPS;    # шаги текущего job'а (живут в памяти isotovideo)
+my $CURRENT;    # запись выполняющегося шага
+my @SECRETS;    # значения, которые нельзя выводить в отчёт
+my $LOG = 'autoinst-log.txt';
+my $MAX_LOG_LINES = 80;
+my $MAX_TEXT_CHARS = 20000;
+my $MAX_CMD_OUTPUT = 4000;
+my $CMD_TIMEOUT = 90;    # значение по умолчанию для run_cmd, как у assert_script_run
 
 sub add_step_secret { push @SECRETS, grep { defined && length } @_; return }
 
@@ -101,16 +101,16 @@ sub step_log {
 sub _exec_capture {
     my ($cmd, %opt) = @_;
     my $timeout = $opt{timeout} // $CMD_TIMEOUT;
-    my $marker  = 'STEPCMD_' . int(rand(1_000_000)) . '_' . time;
-    my $tmp     = "/tmp/$marker.log";
-    # Оборачиваем исходную команду как есть: она уже полноценная shell-строка (с пайпами и т.п.).
+    my $marker = 'STEPCMD_' . int(rand(1_000_000)) . '_' . time;
+    my $tmp = "/tmp/$marker.log";
+# Оборачиваем исходную команду как есть: она уже полноценная shell-строка (с пайпами и т.п.).
     my $wrapped = "{ $cmd ; } > $tmp 2>&1; echo ${marker}_RC=\$? >> $tmp";
     testapi::script_run($wrapped, timeout => $timeout);
 
     my $raw = testapi::script_output("cat $tmp", quiet => 1, proceed_on_failure => 1) // '';
     testapi::script_run("rm -f $tmp", quiet => 1, timeout => 10);
 
-    my ($rc)     = $raw =~ /\Q$marker\E_RC=(-?\d+)/;
+    my ($rc) = $raw =~ /\Q$marker\E_RC=(-?\d+)/;
     (my $out = $raw) =~ s/\Q$marker\E_RC=-?\d+\s*\z//;
     $out =~ s/\s+\z//;
     $rc = defined $rc ? $rc : -1;    # -1: не смогли прочитать код возврата (например, ушла консоль)
@@ -166,12 +166,12 @@ sub step {
     $file =~ s{^.*/(?=(?:tests|lib)/)}{};
     my $where = "$file:$line";
     my $start = time;
-    my $rec     = {name => $name, status => 'passed', start => $start, location => $where, actions => []};
+    my $rec = {name => $name, status => 'passed', start => $start, location => $where, actions => []};
     diag("[STEP] START: $name");
 
     my $prev = $CURRENT;
     $CURRENT = $rec;
-    my $ok  = eval { $code->(); 1 };
+    my $ok = eval { $code->(); 1 };
     my $err = $@ || 'unknown error';
     $CURRENT = $prev;
     $rec->{duration} = time - $start;
@@ -180,9 +180,9 @@ sub step {
         # Заголовок ошибки должен быть человеческим описанием (run_cmd/step_log), а не строкой
         # "$ cmd / exit code / вывод", которую run_cmd/probe_cmd логируют последней действием.
         my $headline =
-            $rec->{last_cmd} ? $rec->{last_cmd}{desc}
+          $rec->{last_cmd} ? $rec->{last_cmd}{desc}
           : defined $rec->{actions}[-1] ? (split /\n/, $rec->{actions}[-1])[0]
-          :                                undef;
+          : undef;
         $rec->{status} = 'failed';
         $rec->{reason} = _mask($opt{fail} // (defined $headline ? "Failed while: $headline" : "Step '$name' failed"));
         $rec->{error} = _mask("$err");
@@ -207,10 +207,10 @@ sub write_step_report {
     if ($opt{failed} && !grep { $_->{status} eq 'failed' } @STEPS) {
         my $after = @STEPS ? "after step '$STEPS[-1]{name}'" : 'before the first step';
         push @STEPS, {
-            name     => 'Failure outside of a step', status => 'failed', start => time, duration => 0,
+            name => 'Failure outside of a step', status => 'failed', start => time, duration => 0,
             location => 'n/a', actions => [],
-            reason   => "Test stopped unexpectedly outside of any step $after (for example in barrier_wait)",
-            error    => "Last lines of autoinst-log.txt:\n" . _mask(_log_since(0)),
+            reason => "Test stopped unexpectedly outside of any step $after (for example in barrier_wait)",
+            error => "Last lines of autoinst-log.txt:\n" . _mask(_log_since(0)),
         };
     }
 
@@ -224,13 +224,13 @@ sub write_step_report {
 
     for my $s (@STEPS) {
         my $failed = $s->{status} eq 'failed';
-        my @out    = @{$s->{actions} // []};
+        my @out = @{$s->{actions} // []};
         push @out, "ERROR: $s->{reason}" if $failed;
 
         my $details = "at $s->{location}\nDetails: $s->{error}";
         if ($failed && $s->{last_cmd}) {
-            my $c        = $s->{last_cmd};
-            my $cmd_out  = length($c->{output}) ? _clean_len($c->{output}, $MAX_CMD_OUTPUT) : '(no output)';
+            my $c = $s->{last_cmd};
+            my $cmd_out = length($c->{output}) ? _clean_len($c->{output}, $MAX_CMD_OUTPUT) : '(no output)';
             my $cmd_text = "\$ $c->{cmd}\nexit code: $c->{rc}\n$cmd_out";
             push @out, '', $cmd_text;
             $details = $cmd_text;    # сама команда/код/вывод важнее внутреннего Perl-текста ошибки

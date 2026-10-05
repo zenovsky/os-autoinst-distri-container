@@ -13,7 +13,7 @@ sub run {
     my $ks_content = get_test_data($ks_path);
 
     die "Kickstart file not found: $ks_path\n"
-        unless defined $ks_content && length $ks_content;
+      unless defined $ks_content && length $ks_content;
 
     save_tmp_file($ks_path, $ks_content);
 

@@ -12,7 +12,7 @@ sub run {
         step_log 'System has booted up and console is ready for use';
         assert_screen 'console-root', 720;
     };
-    
+
     step 'Login as Root' => sub {
         step_log 'Log in as root user';
         login_as_root();
@@ -21,7 +21,7 @@ sub run {
 }
 
 sub test_flags {
-    return { fatal => 1 };
+    return {fatal => 1};
 }
 
 1;

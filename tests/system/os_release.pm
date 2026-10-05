@@ -27,8 +27,8 @@ sub run {
 
 
     check_os_release(
-        NAME         => $os_name ,
-        VERSION_ID     => $version
+        NAME => $os_name,
+        VERSION_ID => $version
     );
 
 

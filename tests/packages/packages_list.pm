@@ -39,7 +39,7 @@ sub run {
 
         my @missing_packages = grep { !exists $installed_hash{$_} } @expected_packages_lower;
         if (@missing_packages) {
-            # Исправлена синтаксическая ошибка исходного скрипта (лишняя закрывающая скобка)
+           # Исправлена синтаксическая ошибка исходного скрипта (лишняя закрывающая скобка)
             record_soft_failure 'Missing packages: ' . join(", ", @missing_packages);
         }
     }
@@ -49,9 +49,9 @@ sub run {
     my @extra_packages = grep { !exists $expected_hash{$_} } @installed_packages;
     if (@extra_packages) {
         # Исправлена синтаксическая ошибка исходного скрипта (лишняя закрывающая скобка)
-        record_info 'Extra Packages', 'The following extra packages are installed: ' . join (", ", @extra_packages);
+        record_info 'Extra Packages', 'The following extra packages are installed: ' . join(", ", @extra_packages);
     }
-   
+
     script_run 'cd ~';
 
     # Отметить тест как пройденный и завершенный

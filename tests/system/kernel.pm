@@ -3,7 +3,7 @@ use testapi;
 
 sub run {
     my $kernel = script_output('uname -r');
-    my $arch   = script_output('uname -m');
+    my $arch = script_output('uname -m');
 
     chomp $kernel;
     chomp $arch;
@@ -14,10 +14,10 @@ sub run {
     );
 
     die "Kernel version is empty\n"
-        unless length $kernel;
+      unless length $kernel;
 
     die "Architecture is empty\n"
-        unless length $arch;
+      unless length $arch;
 
     assert_script_run(
         'uname -r',

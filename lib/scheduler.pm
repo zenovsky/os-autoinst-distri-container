@@ -15,10 +15,10 @@ sub load_yaml_schedule {
     my $yaml_schedule = get_var('YAML_SCHEDULE') or return 0;
 
     my $casedir = get_var('CASEDIR', '.');
-    my $path    = "$casedir/$yaml_schedule";
+    my $path = "$casedir/$yaml_schedule";
     die "YAML_SCHEDULE file not found: $path\n" unless -e $path;
 
-    my $ypp  = YAML::PP->new(schema => ['Core']);
+    my $ypp = YAML::PP->new(schema => ['Core']);
     my $data = $ypp->load_file($path);
 
     _apply_vars($data->{vars} // {});
@@ -69,7 +69,7 @@ sub _expand {
     my @result;
     for my $item (@$schedule) {
         if ($item =~ /^\{\{\s*(\S+)\s*\}\}$/) {
-            my $key    = $1;
+            my $key = $1;
             my $branch = $conditional->{$key};
             die "conditional_schedule has no key '$key' referenced by {{$key}}\n" unless $branch;
             push @result, _expand(_resolve($branch), $conditional);
@@ -88,9 +88,9 @@ sub _resolve {
     for my $var (keys %$branch) {
         my $value = get_var($var);
         my $list =
-            defined $value && exists $branch->{$var}{$value} ? $branch->{$var}{$value}
-          : exists $branch->{$var}{'+undefined'}              ? $branch->{$var}{'+undefined'}
-          :                                                      undef;
+          defined $value && exists $branch->{$var}{$value} ? $branch->{$var}{$value}
+          : exists $branch->{$var}{'+undefined'} ? $branch->{$var}{'+undefined'}
+          : undef;
         return @$list if $list;
     }
     return ();

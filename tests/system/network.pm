@@ -14,7 +14,7 @@ sub run {
     );
 
     die "No network interfaces found\n"
-        unless $interfaces =~ /\S+/;
+      unless $interfaces =~ /\S+/;
 
     # Check IPv4 address
     my $ipv4 = script_output(
@@ -28,7 +28,7 @@ sub run {
     );
 
     die "No IPv4 address configured\n"
-        unless $ipv4 =~ /\d+\.\d+\.\d+\.\d+\/\d+/;
+      unless $ipv4 =~ /\d+\.\d+\.\d+\.\d+\/\d+/;
 
     # Check default route
     my $route = script_output(
@@ -44,7 +44,7 @@ sub run {
     );
 
     die "Default route is missing\n"
-        unless length $route;
+      unless length $route;
 
     # Check gateway connectivity
     my ($gateway) = $route =~ /default via ([0-9.]+)/;

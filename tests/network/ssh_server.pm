@@ -37,7 +37,7 @@ sub run {
     # --- Preconditions ---
     step 'Precondition. Network setup' => sub {
         run_cmd "Adding static connection ens4-static ($server_ip/15, gateway 172.16.2.2, DNS $dns_ip)" =>
-        'nmcli con add type ethernet ifname ens4 con-name ens4-static '
+          'nmcli con add type ethernet ifname ens4 con-name ens4-static '
           . "ipv4.addresses $server_ip/15 ipv4.gateway 172.16.2.2 "
           . "ipv4.dns $dns_ip ipv4.method manual";
         run_cmd 'Activating connection ens4-static' => 'nmcli con up ens4-static';
@@ -122,7 +122,7 @@ sub run {
             die "dnf check-update failed with exit code $rc:\n$out";
         }
         run_cmd 'Checking that the sshd service is active after the update' => 'systemctl is-active sshd';
-    }; 
+    };
 
     barrier_wait 'server_updated';
     barrier_wait 'client_final_checks_done';
