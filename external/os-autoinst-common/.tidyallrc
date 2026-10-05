@@ -1,3 +1,4 @@
 [PerlTidy]
-select = **/*.{pl,pm,t} tools/tidyall tools/perlcritic tools/update-deps
+select = **/*.{pl,pm,t} tools/tidyall tools/perlcritic
 argv = --profile=$ROOT/.perltidyrc
+ignore = external/**/*
