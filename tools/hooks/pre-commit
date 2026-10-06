@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+# Только staged-файлы, которые существуют
+files=$(git diff --cached --name-only --diff-filter=ACM)
+
+# 1. Perl: форматирование только staged-файлов
+perl_files=$(echo "$files" | grep -E '\.(pm|pl|t)$' | grep -v '^external/' || true)
+if [ -n "$perl_files" ]; then
+    tidyall $perl_files
+    git add $perl_files          # вернуть отформатированные версии в коммит
+    perlcritic $perl_files
+fi
+
+# 2. YAML: только проверка
+yaml_files=$(echo "$files" | grep -E '\.ya?ml$' | grep -v '^external/' || true)
+if [ -n "$yaml_files" ]; then
+    yamllint -c .yamllint $yaml_files
+fi
