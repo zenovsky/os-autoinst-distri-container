@@ -1,0 +1,27 @@
+stages:
+  - test
+
+openqa:openssh:
+  stage: test
+  tags:
+    - openqa-wsl
+  variables:
+    OPENQA_URL: "http://localhost"
+    OPENQA_DISTRI: "os-autoinst-distri-container"
+    OPENQA_VERSION: "10.2"
+    OPENQA_FLAVOR: "Minimal"
+    OPENQA_ARCH: "x86_64"
+    OPENQA_ISO: "AlmaLinux-10.2-x86_64-minimal.iso"
+    OPENQA_CASEDIR: "/var/lib/openqa/tests/os-autoinst-distri-container"
+    OPENQA_TEST: "openssh"
+    OPENQA_DNS_IP: "10.255.255.254"
+  script:
+    - chmod +x ci/run-openqa-tests.sh
+    - ./ci/run-openqa-tests.sh
+  artifacts:
+    when: always
+    reports:
+      junit: "junit-*.xml"
+    paths:
+      - "junit-*.xml"
+    expire_in: 30 days

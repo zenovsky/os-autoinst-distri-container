@@ -51,3 +51,4 @@ scenarios:
             BOOT_HDD_IMAGE: '1'
             HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
             PARALLEL_WITH: openssh-server
+            START_AFTER_TEST: create-base-image
