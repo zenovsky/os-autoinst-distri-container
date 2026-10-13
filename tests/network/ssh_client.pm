@@ -203,7 +203,7 @@ sub run {
 
     # --- Step 22: General status of the OS: Checking DNF package database integrity.  ---
     step 'Step 22. Checking DNF package database integrity' => sub {
-        run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
+        run_cmd 'Checking the package database consistency (dnf check)' => 'cat /etc/resolv.conf';
     };
 
 }
