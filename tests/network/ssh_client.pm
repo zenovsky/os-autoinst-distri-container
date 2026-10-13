@@ -40,10 +40,10 @@ sub run {
 
     barrier_wait 'user_ready';
 
-    # --- Step 1: Install the package opennsh ---
-    step 'Step 1. Install the package openssh' => sub {
-        run_cmd 'Installing the openssh package with dnf' => 'dnf install -y openssh', timeout => 300;
-    };
+    # # --- Step 1: Install the package opennsh ---
+    # step 'Step 1. Install the package openssh' => sub {
+    #     run_cmd 'Installing the openssh package with dnf' => 'dnf install -y openssh', timeout => 300;
+    # };
 
     # --- Step 2: sshd port configuration ---
     step 'Step 2. sshd port configuration' => sub {
@@ -167,44 +167,44 @@ sub run {
 
     barrier_wait 'client_final_checks_done';
 
-    # # --- Step 16: Checking logs for errors ---
-    # step 'Step 16. Check logs for errors' => sub {
-    #     step_log 'Reading the last 100 lines of the sshd journal';
-    #     my $logs = script_output 'journalctl -u sshd --no-pager -n 100';
-    #     step_log 'Checking the journal for "Failed"", "fatal" or "error" entries';
-    #     die "sshd logs contain errors:\n$logs"
-    #       if $logs =~ /Failed|fatal|error/i;
-    # };
+    # --- Step 16: Checking logs for errors ---
+    step 'Step 16. Check logs for errors' => sub {
+        step_log 'Reading the last 100 lines of the sshd journal';
+        my $logs = script_output 'journalctl -u sshd --no-pager -n 100';
+        step_log 'Checking the journal for "Failed"", "fatal" or "error" entries';
+        die "sshd logs contain errors:\n$logs"
+          if $logs =~ /Failed|fatal|error/i;
+    };
 
-    # # --- Step 17: General status of the OS: Verify the integrity of the installed package ---
-    # step 'Step 17. Verify the integrity of the installed package' => sub {
-    #     run_cmd 'Verifying the openssh package files (rpm -V)' => 'rpm -V openssh', quiet => 1;
-    # };
+    # --- Step 17: General status of the OS: Verify the integrity of the installed package ---
+    step 'Step 17. Verify the integrity of the installed package' => sub {
+        run_cmd 'Verifying the openssh package files (rpm -V)' => 'rpm -V openssh', quiet => 1;
+    };
 
-    # # --- Step 18: General status of the OS: Verify that SELinux is enabled and running in Enforcing mode.  ---
-    # step 'Step 18. Verify that SELinux is enabled' => sub {
-    #     run_cmd 'Checking that SELinux is in Enforcing mode' => 'getenforce | grep "Enforcing"';
-    # };
+    # --- Step 18: General status of the OS: Verify that SELinux is enabled and running in Enforcing mode.  ---
+    step 'Step 18. Verify that SELinux is enabled' => sub {
+        run_cmd 'Checking that SELinux is in Enforcing mode' => 'getenforce | grep "Enforcing"';
+    };
 
-    # # --- Step 19: General status of the OS: Verification that SELinux file labels match the policy.  ---
-    # step 'Step 19. Verification SELinux file labels match the policy' => sub {
-    #     run_cmd 'Verification SELinux file labels match the policy' => '! restorecon -nR / 2>&1 | grep -i "would relabel"';
-    # };
+    # --- Step 19: General status of the OS: Verification that SELinux file labels match the policy.  ---
+    step 'Step 19. Verification SELinux file labels match the policy' => sub {
+        run_cmd 'Verification SELinux file labels match the policy' => '! restorecon -nR / 2>&1 | grep -i "would relabel"';
+    };
 
-    # # --- Step 20: General status of the OS: Checking for the absence of SELinux AVC denials since boot.  ---
-    # step 'Step 20. Checking for the absence of SELinux AVC denials' => sub {
-    #     run_cmd 'Checking for the absence of SELinux AVC denials' => '! ausearch -m AVC,USER_AVC -ts boot | grep -q denied';
-    # };
+    # --- Step 20: General status of the OS: Checking for the absence of SELinux AVC denials since boot.  ---
+    step 'Step 20. Checking for the absence of SELinux AVC denials' => sub {
+        run_cmd 'Checking for the absence of SELinux AVC denials' => '! ausearch -m AVC,USER_AVC -ts boot | grep -q denied';
+    };
 
-    # # --- Step 21: General status of the OS: Checking for failed systemd units.  ---
-    # step 'Step 21. Checking for failed systemd units' => sub {
-    #     run_cmd 'Checking that there are no failed systemd units' => 'systemctl --failed | grep "0 loaded units listed"';
-    # };
+    # --- Step 21: General status of the OS: Checking for failed systemd units.  ---
+    step 'Step 21. Checking for failed systemd units' => sub {
+        run_cmd 'Checking that there are no failed systemd units' => 'systemctl --failed | grep "0 loaded units listed"';
+    };
 
-    # # --- Step 22: General status of the OS: Checking DNF package database integrity.  ---
-    # step 'Step 22. Checking DNF package database integrity' => sub {
-    #     run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
-    # };
+    # --- Step 22: General status of the OS: Checking DNF package database integrity.  ---
+    step 'Step 22. Checking DNF package database integrity' => sub {
+        run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
+    };
 
 }
 
