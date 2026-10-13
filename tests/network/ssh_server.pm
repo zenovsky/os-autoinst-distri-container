@@ -44,6 +44,7 @@ sub run {
         run_cmd "Setting nameserver $dns_ip in /etc/resolv.conf" => "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     };
 
+    script_run 'cat /etc/resolv.conf';
     barrier_wait 'net_ready';
 
     step 'Precondition. Ping client' => sub {
