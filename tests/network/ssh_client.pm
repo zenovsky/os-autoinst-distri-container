@@ -165,6 +165,8 @@ sub run {
           . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
     };
 
+    barrier_wait 'client_final_checks_done';
+
     # --- Step 16: Checking logs for errors ---
     step 'Step 16. Check logs for errors' => sub {
         step_log 'Reading the last 100 lines of the sshd journal';
@@ -204,7 +206,6 @@ sub run {
         run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
     };
 
-    barrier_wait 'client_final_checks_done';
 }
 
 sub post_fail_hook { write_step_report('openssh', failed => 1) }
