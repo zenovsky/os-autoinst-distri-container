@@ -136,14 +136,39 @@ sub run {
           if $logs =~ /Failed|fatal|error/i;
     };
 
-    # --- Step 11: General status of the OS ---
-    step 'Step 11. General status of the OS' => sub {
+    # --- Step 11: General status of the OS: Verify the integrity of the installed package ---
+    step 'Step 11. Verify the integrity of the installed package' => sub {
         run_cmd 'Verifying the openssh package files (rpm -V)' => 'rpm -V openssh', quiet => 1;
-        run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
-        run_cmd 'Checking that SELinux is in Enforcing mode' => 'getenforce | grep "Enforcing"';
+    };
+
+    # --- Step 12: General status of the OS: sshd listens on port 22  ---
+    step 'Step 12. sshd listens on port 22' => sub {
         run_cmd 'Checking that port 22 is still listening' => 'ss -lntp | grep ":22"';
-        run_cmd 'Printing the kernel command line' => 'cat /proc/cmdline';
+    };
+
+    # --- Step 13: General status of the OS: Verify that SELinux is enabled and running in Enforcing mode.  ---
+    step 'Step 13. Verify that SELinux is enabled' => sub {
+        run_cmd 'Checking that SELinux is in Enforcing mode' => 'getenforce | grep "Enforcing"';
+    };
+
+    # --- Step 14: General status of the OS: Verification that SELinux file labels match the policy.  ---
+    step 'Step 14. Verification SELinux file labels match the policy' => sub {
+        run_cmd 'Verification SELinux file labels match the policy' => '! restorecon -nR / 2>&1 | grep -i "would relabel"';
+    };
+
+    # --- Step 15: General status of the OS: Checking for the absence of SELinux AVC denials since boot.  ---
+    step 'Step 15. Checking for the absence of SELinux AVC denials' => sub {
+        run_cmd 'Checking for the absence of SELinux AVC denials' => '! ausearch -m AVC,USER_AVC -ts boot | grep -q denied';
+    };
+
+    # --- Step 16: General status of the OS: Checking for failed systemd units.  ---
+    step 'Step 16. Checking for failed systemd units' => sub {
         run_cmd 'Checking that there are no failed systemd units' => 'systemctl --failed | grep "0 loaded units listed"';
+    };
+
+    # --- Step 17: General status of the OS: Checking DNF package database integrity.  ---
+    step 'Step 17. Checking DNF package database integrity' => sub {
+        run_cmd 'Checking the package database consistency (dnf check)' => 'dnf check';
     };
 }
 
