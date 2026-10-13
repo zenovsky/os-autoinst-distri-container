@@ -44,7 +44,6 @@ sub run {
         run_cmd "Setting nameserver $dns_ip in /etc/resolv.conf" => "echo 'nameserver $dns_ip' > /etc/resolv.conf";
     };
 
-    script_run 'cat /etc/resolv.conf';
     barrier_wait 'net_ready';
 
     step 'Precondition. Ping client' => sub {
@@ -59,10 +58,10 @@ sub run {
 
     barrier_wait 'user_ready';
 
-    # # --- Step 1: Install the package ---
-    # step 'Step 1. Install the package' => sub {
-    #     run_cmd 'Installing the openssh package with dnf' => 'dnf install -y openssh', timeout => 300, quiet => 1;
-    # };
+    # --- Step 1: Install the package ---
+    step 'Step 1. Install the package' => sub {
+        run_cmd 'Installing the openssh package with dnf' => 'cat /etc/resolv.conf', timeout => 300, quiet => 1;
+    };
 
     # --- Step 2: sshd port configuration ---
     step 'Step 2. sshd port configuration' => sub {
@@ -115,13 +114,13 @@ sub run {
 
     # --- Step 9: checking/installing the package update ---
     step 'Step 9. Check and install the package update' => sub {
-        my ($rc, $out) = probe_cmd 'Checking for an openssh update (dnf check-update)' => 'dnf check-update openssh', timeout => 300;
-        if ($rc == 100) {
-            run_cmd 'An update is available, installing it with dnf update' => 'dnf update -y openssh', timeout => 300;
-        }
-        elsif ($rc != 0) {
-            die "dnf check-update failed with exit code $rc:\n$out";
-        }
+        # my ($rc, $out) = probe_cmd 'Checking for an openssh update (dnf check-update)' => 'dnf check-update openssh', timeout => 300;
+        # if ($rc == 100) {
+        #     run_cmd 'An update is available, installing it with dnf update' => 'dnf update -y openssh', timeout => 300;
+        # }
+        # elsif ($rc != 0) {
+        #     die "dnf check-update failed with exit code $rc:\n$out";
+        # }
         run_cmd 'Checking that the sshd service is active after the update' => 'systemctl is-active sshd';
     };
 

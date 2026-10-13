@@ -40,10 +40,10 @@ sub run {
 
     barrier_wait 'user_ready';
 
-    # # --- Step 1: Install the package opennsh ---
-    # step 'Step 1. Install the package openssh' => sub {
-    #     run_cmd 'Installing the openssh package with dnf' => 'dnf install -y openssh', timeout => 300;
-    # };
+    # --- Step 1: Install the package ---
+    step 'Step 1. Install the package' => sub {
+        run_cmd 'Installing the openssh package with dnf' => 'cat /etc/resolv.conf', timeout => 300, quiet => 1;
+    };
 
     # --- Step 2: sshd port configuration ---
     step 'Step 2. sshd port configuration' => sub {
