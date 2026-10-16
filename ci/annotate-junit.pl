@@ -31,15 +31,12 @@ my $gitlab_esc = defined $gitlab_url && length $gitlab_url ? xml_escape($gitlab_
 my $props = qq{  <properties>\n    <property name="openqa_job_url" value="$openqa_esc"/>\n};
 $props .= qq{    <property name="gitlab_job_url" value="$gitlab_esc"/>\n} if defined $gitlab_esc;
 $props .= qq{  </properties>\n};
-$xml =~ s{(<testsuite\b[^>]*>\n)}{$1$props}s
-  or warn "annotate-junit.pl: <testsuite> tag not found in $file, properties not added\n";
+$xml =~ s{(<testsuite\b[^>]*>\n)}{$1$props}s or warn "annotate-junit.pl: <testsuite> tag not found in $file, properties not added\n";
 
-my $link_text = "openQA job: $openqa_esc";
-$link_text .= "\nGitLab job: $gitlab_esc" if defined $gitlab_esc;
-
-$xml =~ s{(<failure\b[^>]*>)(.*?)(</failure>)}{$1 . $2 . "\n\n$link_text" . $3}ges;
-$xml =~ s{(<system-out>)(.*?)(</system-out>)}{$1$2\n\n$link_text$3}gs;
-$xml =~ s{<testcase\b([^>]*?)\s*/>}{<testcase$1>\n    <system-out>$link_text</system-out>\n  </testcase>}g;
+# Ссылка в тексте failure - то, что реально видно глазами в панели деталей теста в GitLab.
+my $link_line = "\n\nopenQA job: $openqa_esc";
+$link_line .= "\nGitLab job: $gitlab_esc" if defined $gitlab_esc;
+$xml =~ s{(<failure\b[^>]*>)(.*?)(</failure>)}{$1 . $2 . $link_line . $3}ges;
 
 open my $out, '>:encoding(UTF-8)', $file or die "write $file: $!\n";
 print $out $xml;
