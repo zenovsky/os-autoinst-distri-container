@@ -4,6 +4,8 @@
 # GitLab мог показать их во вкладке Tests.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 : "${OPENQA_URL:=http://localhost}"
 : "${OPENQA_DISTRI:=os-autoinst-distri-container}"
 : "${OPENQA_VERSION:=10.2}"
@@ -85,6 +87,9 @@ for id in $job_ids; do
                 url="$OPENQA_URL/tests/$id/file/$fname"
                 out="${fname%.xml}-$id.xml"
                 if curl -fsS "$url" -o "$out"; then
+                    # Добавляем в отчёт ссылку на этот openQA job (видео/скриншоты/логи) и,
+                    # если запущено из GitLab CI, на сам job GitLab.
+                    perl "$SCRIPT_DIR/annotate-junit.pl" "$out" "$OPENQA_URL/tests/$id" "${CI_JOB_URL:-}"
                     echo "    saved $out"
                 fi
                 ;;

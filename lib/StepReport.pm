@@ -166,7 +166,12 @@ sub step {
     $file =~ s{^.*/(?=(?:tests|lib)/)}{};
     my $where = "$file:$line";
     my $start = time;
-    my $rec = {name => $name, status => 'passed', start => $start, location => $where, actions => []};
+    # file/line хранятся отдельно (а не только внутри location) - JUnit/GitLab ожидают их как
+    # два отдельных атрибута testcase, а не "path:line" одной строкой в file=.
+    my $rec = {
+        name => $name, status => 'passed', start => $start, location => $where,
+        file => $file, line => $line, actions => [],
+    };
     diag("[STEP] START: $name");
 
     my $prev = $CURRENT;
@@ -227,7 +232,7 @@ sub write_step_report {
         my @out = @{$s->{actions} // []};
         push @out, "ERROR: $s->{reason}" if $failed;
 
-        my $details = "at $s->{location}\nDetails: $s->{error}";
+        my $details = $failed ? "at $s->{location}\nDetails: $s->{error}" : '';
         if ($failed && $s->{last_cmd}) {
             my $c = $s->{last_cmd};
             my $cmd_out = length($c->{output}) ? _clean_len($c->{output}, $MAX_CMD_OUTPUT) : '(no output)';
@@ -245,8 +250,14 @@ sub write_step_report {
         }
         $body .= sprintf "    <system-out>%s</system-out>\n", xml_escape($out) if length $out;
 
-        my $attrs = sprintf 'classname="%s" name="%s" file="%s" time="%.3f"',
-          xml_escape($suite), xml_escape(_clean($s->{name})), xml_escape($s->{location}), $s->{duration};
+        my $attrs = sprintf 'classname="%s" name="%s" time="%.3f"',
+          xml_escape($suite), xml_escape(_clean($s->{name})), $s->{duration};
+        # file/line - отдельные атрибуты (как у pytest/JUnit), а не склеенная "path:line" строка:
+        # так GitLab и прочие вьюеры строят корректную ссылку на файл и строку в репозитории.
+        # У синтетического "Failure outside of a step" своего файла нет - атрибуты просто не добавляем.
+        if (defined $s->{file}) {
+            $attrs .= sprintf ' file="%s" line="%d"', xml_escape($s->{file}), $s->{line};
+        }
         $xml .= length $body ? "  <testcase $attrs>\n$body  </testcase>\n" : "  <testcase $attrs />\n";
     }
     $xml .= "</testsuite>\n</testsuites>\n";
