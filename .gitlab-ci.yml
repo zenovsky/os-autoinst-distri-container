@@ -13,7 +13,7 @@ openqa:openssh:
     OPENQA_ARCH: "x86_64"
     OPENQA_ISO: "AlmaLinux-10.2-x86_64-minimal.iso"
     OPENQA_CASEDIR: "/var/lib/openqa/tests/os-autoinst-distri-container"
-    OPENQA_TEST: "openssh"
+    OPENQA_TEST: "openssh-client"
     OPENQA_DNS_IP: "10.255.255.254"
   script:
     - chmod +x ci/run-openqa-tests.sh
