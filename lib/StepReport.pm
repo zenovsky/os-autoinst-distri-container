@@ -163,14 +163,13 @@ sub probe_cmd {
 sub step {
     my ($name, $code, %opt) = @_;
     my ($file, $line) = (caller)[1, 2];
+    my $src = $file;    # <-- полный путь для разбора исходника
     $file =~ s{^.*/(?=(?:tests|lib)/)}{};
     my $where = "$file:$line";
     my $start = time;
-    # file/line хранятся отдельно (а не только внутри location) - JUnit/GitLab ожидают их как
-    # два отдельных атрибута testcase, а не "path:line" одной строкой в file=.
     my $rec = {
         name => $name, status => 'passed', start => $start, location => $where,
-        file => $file, line => $line, actions => [],
+        file => $file, line => $line, src => $src, actions => [],    # <-- src
     };
     diag("[STEP] START: $name");
 
@@ -204,6 +203,27 @@ sub step {
     die $err;
 }
 
+# Ищет в исходнике теста объявления шагов `step 'Имя' => sub {...}`, расположенные ниже строки $line.
+# Нужна, чтобы показать в отчёте шаги, которые не запустились из-за падения раньше.
+sub _planned_steps_after {
+    my ($src, $line) = @_;
+    return () unless defined $src && -f $src;
+    my $txt = path($src)->slurp;
+    my $dec = decode('UTF-8', $txt);
+    $txt = $dec if defined $dec;
+
+    my (@found, $n);
+    for my $l (split /\n/, $txt) {
+        $n++;
+        next unless $n > $line;
+        if ($l =~ /^\s*step\s*\(?\s*(['"])((?:\\.|(?!\1).)*)\1\s*(?:=>|,)/) {
+            (my $name = $2) =~ s/\\(['"\\])/$1/g;
+            push @found, {name => $name, line => $n};
+        }
+    }
+    return @found;
+}
+
 sub write_step_report {
     my ($suite, %opt) = @_;
     $suite //= get_var('TEST', 'openqa');
@@ -219,16 +239,46 @@ sub write_step_report {
         };
     }
 
+    # Шаги, которые не запустились из-за падения: берём их объявления из исходника теста
+    # и записываем как skipped.
+    if ($opt{failed}) {
+        # Последний реально выполненный шаг: от его строки в исходнике ищем дальше.
+        my ($last) = grep { defined $_->{src} } reverse @STEPS;
+        my $src = $last ? $last->{src} : undef;
+        my $from = $last ? $last->{line} : 0;
+
+        unless ($src) {    # упали до первого шага - берём исходник текущего тест-модуля
+            my $script = eval { $autotest::current_test->{script} };
+            $src = get_var('CASEDIR', '.') . "/$script" if $script;
+        }
+
+        my ($failed_step) = grep { $_->{status} eq 'failed' && defined $_->{file} } @STEPS;
+        my $cause = $failed_step ? "step '$failed_step->{name}' failed" : 'the test failed outside of a step';
+
+        my %seen = map { $_->{name} => 1 } @STEPS;
+        for my $p (_planned_steps_after($src, $from)) {
+            next if $seen{$p->{name}}++;
+            (my $file = $src) =~ s{^.*/(?=(?:tests|lib)/)}{};
+            push @STEPS, {
+                name => $p->{name}, status => 'skipped', start => time, duration => 0,
+                location => "$file:$p->{line}", file => $file, line => $p->{line},
+                actions => [], reason => "Skipped because $cause",
+            };
+        }
+    }
+
     my $failures = grep { $_->{status} eq 'failed' } @STEPS;
+    my $skipped = grep { $_->{status} eq 'skipped' } @STEPS;
     my $total = 0;
     $total += $_->{duration} for @STEPS;
 
     my $xml = sprintf qq{<?xml version="1.0" encoding="UTF-8"?>\n<testsuites>\n}
-      . qq{<testsuite name="%s" tests="%d" failures="%d" time="%.3f">\n},
-      xml_escape($suite), scalar @STEPS, $failures, $total;
+      . qq{<testsuite name="%s" tests="%d" failures="%d" skipped="%d" time="%.3f">\n},
+      xml_escape($suite), scalar @STEPS, $failures, $skipped, $total;
 
     for my $s (@STEPS) {
         my $failed = $s->{status} eq 'failed';
+        my $is_skipped = $s->{status} eq 'skipped';
         my @out = @{$s->{actions} // []};
         push @out, "ERROR: $s->{reason}" if $failed;
 
@@ -248,13 +298,15 @@ sub write_step_report {
             $body .= sprintf qq{    <failure message="%s" type="StepFailure">%s</failure>\n},
               xml_escape(_clean($msg)), xml_escape(_clean($details));
         }
+        if ($is_skipped) {
+            $body .= sprintf qq{    <skipped message="%s"/>\n}, xml_escape(_clean($s->{reason}));
+        }
         $body .= sprintf "    <system-out>%s</system-out>\n", xml_escape($out) if length $out;
 
         my $attrs = sprintf 'classname="%s" name="%s" time="%.3f"',
           xml_escape($suite), xml_escape(_clean($s->{name})), $s->{duration};
-        # file/line - отдельные атрибуты (как у pytest/JUnit), а не склеенная "path:line" строка:
-        # так GitLab и прочие вьюеры строят корректную ссылку на файл и строку в репозитории.
-        # У синтетического "Failure outside of a step" своего файла нет - атрибуты просто не добавляем.
+        # file/line - отдельные атрибуты (как у pytest/JUnit), а не склеенная "path:line" строка.
+        # У синтетического "Failure outside of a step" своего файла нет - атрибуты не добавляем.
         if (defined $s->{file}) {
             $attrs .= sprintf ' file="%s" line="%d"', xml_escape($s->{file}), $s->{line};
         }

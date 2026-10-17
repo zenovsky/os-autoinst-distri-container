@@ -60,7 +60,7 @@ sub run {
 
     # --- Step 1: Install the package ---
     step 'Step 1. Install the package' => sub {
-        run_cmd 'Installing the openssh package with dnf' => 'cat /etc/resolv.conf', timeout => 300, quiet => 1;
+        run_cmd 'Installing the openssh package with dnf' => 'cat /et/resolv.conf', timeout => 300, quiet => 1;
     };
 
     # --- Step 2: sshd port configuration ---
