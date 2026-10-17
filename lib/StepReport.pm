@@ -27,6 +27,7 @@ use Mojo::JSON 'encode_json';
 use Mojo::File 'path';
 use Mojo::Util qw(xml_escape encode decode);
 use testapi;
+use POSIX 'strftime';
 
 our @EXPORT = qw(step step_log run_cmd probe_cmd write_step_report add_step_secret);
 
@@ -188,6 +189,7 @@ sub step {
           : defined $rec->{actions}[-1] ? (split /\n/, $rec->{actions}[-1])[0]
           : undef;
         $rec->{status} = 'failed';
+        $rec->{type} = $rec->{last_cmd} ? 'CommandFailure' : 'RuntimeError';
         $rec->{reason} = _mask($opt{fail} // (defined $headline ? "Failed while: $headline" : "Step '$name' failed"));
         $rec->{error} = _mask("$err");
         # Никакого сырого autoinst-log.txt здесь: если команда падала через run_cmd, у неё уже
@@ -232,7 +234,8 @@ sub write_step_report {
     if ($opt{failed} && !grep { $_->{status} eq 'failed' } @STEPS) {
         my $after = @STEPS ? "after step '$STEPS[-1]{name}'" : 'before the first step';
         push @STEPS, {
-            name => 'Failure outside of a step', status => 'failed', start => time, duration => 0,
+            name => 'Failure outside of a step', status => 'failed', type => 'RuntimeError',
+            start => time, duration => 0,
             location => 'n/a', actions => [],
             reason => "Test stopped unexpectedly outside of any step $after (for example in barrier_wait)",
             error => "Last lines of autoinst-log.txt:\n" . _mask(_log_since(0)),
@@ -242,7 +245,6 @@ sub write_step_report {
     # Шаги, которые не запустились из-за падения: берём их объявления из исходника теста
     # и записываем как skipped.
     if ($opt{failed}) {
-        # Последний реально выполненный шаг: от его строки в исходнике ищем дальше.
         my ($last) = grep { defined $_->{src} } reverse @STEPS;
         my $src = $last ? $last->{src} : undef;
         my $from = $last ? $last->{line} : 0;
@@ -272,9 +274,13 @@ sub write_step_report {
     my $total = 0;
     $total += $_->{duration} for @STEPS;
 
+    # Время начала набора = самый ранний start (UTC, ISO8601 без часового пояса, как в схеме JUnit).
+    my $t0 = @STEPS ? (sort { $a <=> $b } map { $_->{start} } @STEPS)[0] : time;
+    my $timestamp = strftime('%Y-%m-%dT%H:%M:%S', gmtime $t0);
+
     my $xml = sprintf qq{<?xml version="1.0" encoding="UTF-8"?>\n<testsuites>\n}
-      . qq{<testsuite name="%s" tests="%d" failures="%d" skipped="%d" time="%.3f">\n},
-      xml_escape($suite), scalar @STEPS, $failures, $skipped, $total;
+      . qq{<testsuite name="%s" tests="%d" failures="%d" skipped="%d" time="%.3f" timestamp="%s">\n},
+      xml_escape($suite), scalar @STEPS, $failures, $skipped, $total, $timestamp;
 
     for my $s (@STEPS) {
         my $failed = $s->{status} eq 'failed';
@@ -286,17 +292,18 @@ sub write_step_report {
         if ($failed && $s->{last_cmd}) {
             my $c = $s->{last_cmd};
             my $cmd_out = length($c->{output}) ? _clean_len($c->{output}, $MAX_CMD_OUTPUT) : '(no output)';
-            my $cmd_text = "\$ $c->{cmd}\nexit code: $c->{rc}\n$cmd_out";
-            push @out, '', $cmd_text;
-            $details = $cmd_text;    # сама команда/код/вывод важнее внутреннего Perl-текста ошибки
+            # Команда/код/вывод идут только в <failure>. В <system-out> они уже есть
+            # в журнале действий (run_cmd -> step_log), второй раз не добавляем.
+            $details = "\$ $c->{cmd}\nexit code: $c->{rc}\n$cmd_out";
         }
         my $out = _clean(join "\n", @out);
 
         my $body = '';
         if ($failed) {
             my ($msg) = split /\n/, $s->{reason};
-            $body .= sprintf qq{    <failure message="%s" type="StepFailure">%s</failure>\n},
-              xml_escape(_clean($msg)), xml_escape(_clean($details));
+            $body .= sprintf qq{    <failure message="%s" type="%s">%s</failure>\n},
+              xml_escape(_clean($msg)), xml_escape($s->{type} // 'RuntimeError'),
+              xml_escape(_clean($details));
         }
         if ($is_skipped) {
             $body .= sprintf qq{    <skipped message="%s"/>\n}, xml_escape(_clean($s->{reason}));
@@ -305,7 +312,7 @@ sub write_step_report {
 
         my $attrs = sprintf 'classname="%s" name="%s" time="%.3f"',
           xml_escape($suite), xml_escape(_clean($s->{name})), $s->{duration};
-        # file/line - отдельные атрибуты (как у pytest/JUnit), а не склеенная "path:line" строка.
+        # file/line - отдельные атрибуты (как у pytest/JUnit).
         # У синтетического "Failure outside of a step" своего файла нет - атрибуты не добавляем.
         if (defined $s->{file}) {
             $attrs .= sprintf ' file="%s" line="%d"', xml_escape($s->{file}), $s->{line};
