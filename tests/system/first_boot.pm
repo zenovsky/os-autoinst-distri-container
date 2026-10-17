@@ -20,9 +20,6 @@ sub run {
 
 }
 
-sub post_fail_hook { write_step_report('create-base-image', failed => 1) }
-sub post_run_hook { write_step_report('create-base-image') }
-
 sub test_flags {
     return {fatal => 1};
 }
