@@ -19,7 +19,7 @@ scenarios:
             QEMUCPUS: '2'
             QEMURAM: '2048'
             HDDSIZEGB: '20'
-            PUBLISH_HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+            PUBLISH_HDD_1: '%DISTRI%-%VERSION%-%ARCH%.qcow2'
 
       - smoke:
           settings:
@@ -28,27 +28,27 @@ scenarios:
             QEMUCPUS: '2'
             QEMURAM: '2048'
             BOOT_HDD_IMAGE: '1'
-            HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+            HDD_1: '%DISTRI%-%VERSION%-%ARCH%.qcow2'
             START_AFTER_TEST: create-base-image
 
       - openssh-server:
           settings:
-            YAML_SCHEDULE: schedule/network/ssh-server.yaml
+            YAML_SCHEDULE: schedule/network/openssh-server.yaml
             NICTYPE: tap
             QEMUCPU: host
             QEMUCPUS: '2'
             QEMURAM: '2048'
             BOOT_HDD_IMAGE: '1'
-            HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+            HDD_1: '%DISTRI%-%VERSION%-%ARCH%.qcow2'
 
-      - openssh:
+      - openssh-client:
           settings:
-            YAML_SCHEDULE: schedule/network/ssh-client.yaml
+            YAML_SCHEDULE: schedule/network/openssh-client.yaml
             NICTYPE: tap
             QEMUCPU: host
             QEMUCPUS: '2'
             QEMURAM: '2048'
             BOOT_HDD_IMAGE: '1'
-            HDD_1: '%DISTRI%-%VERSION%-%BUILD%-%ARCH%.qcow2'
+            HDD_1: '%DISTRI%-%VERSION%-%ARCH%.qcow2'
             PARALLEL_WITH: openssh-server
-            START_AFTER_TEST: create-base-image
+
