@@ -208,7 +208,7 @@ sub run {
 
 }
 
-sub post_fail_hook { write_step_report('network', failed => 1) }
-sub post_run_hook { write_step_report('network') }
+sub post_fail_hook { write_step_report('openssh-client', failed => 1) }
+sub post_run_hook { write_step_report('openssh-client') }
 
 1;
