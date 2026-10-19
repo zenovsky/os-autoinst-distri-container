@@ -4,7 +4,7 @@ description: >
 vars:
   SSH_SERVER_IP: 172.16.2.10
   SSH_CLIENT_IP: 172.16.2.11
-  STATIC_IP: '%SSH_SERVER_IP%'
+  STATIC_IP: '%SSH_CLIENT_IP%'
 schedule:
   - tests/system/first_boot.pm
   - tests/network/setup_static_ip.pm
