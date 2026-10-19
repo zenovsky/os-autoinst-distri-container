@@ -13,6 +13,11 @@ package StepReport;
 #   sub post_fail_hook { write_step_report('ssh_client', failed => 1) }
 #   sub post_run_hook  { write_step_report('ssh_client') }
 #
+# Отчёт содержит только шаги ТЕКУЩЕГО модуля (файл, из которого вызван step). Массив шагов общий
+# для всего job'а, поэтому без фильтра в отчёт каждого модуля попадали бы шаги предыдущих
+# (first_boot.pm, setup_static_ip.pm и т.д.). Чтобы выгрузить все шаги job'а:
+#   write_step_report('suite', all => 1)
+#
 # Причина ошибки:
 #   - если задан fail => '...', берётся он;
 #   - иначе "Failed while: <последнее step_log шага>";
@@ -230,10 +235,18 @@ sub write_step_report {
     my ($suite, %opt) = @_;
     $suite //= get_var('TEST', 'openqa');
 
+    # Шаги только текущего модуля: @STEPS общий для всего job'а (first_boot, setup_* и т.д.).
+    # Шаг запоминает файл как tests/<...>.pm, текущий модуль - $autotest::current_test->{script}.
+    my $script = eval { $autotest::current_test->{script} };
+    if (defined $script) {
+        $script =~ s{^.*/(?=(?:tests|lib)/)}{};
+    }
+    my @steps = (!$opt{all} && defined $script) ? grep { defined $_->{file} && $_->{file} eq $script } @STEPS : @STEPS;
+
     # Тест упал вне шага (например, в barrier_wait): без этого отчёт остался бы зелёным.
-    if ($opt{failed} && !grep { $_->{status} eq 'failed' } @STEPS) {
-        my $after = @STEPS ? "after step '$STEPS[-1]{name}'" : 'before the first step';
-        push @STEPS, {
+    if ($opt{failed} && !grep { $_->{status} eq 'failed' } @steps) {
+        my $after = @steps ? "after step '$steps[-1]{name}'" : 'before the first step';
+        push @steps, {
             name => 'Failure outside of a step', status => 'failed', type => 'RuntimeError',
             start => time, duration => 0,
             location => 'n/a', actions => [],
@@ -245,23 +258,22 @@ sub write_step_report {
     # Шаги, которые не запустились из-за падения: берём их объявления из исходника теста
     # и записываем как skipped.
     if ($opt{failed}) {
-        my ($last) = grep { defined $_->{src} } reverse @STEPS;
+        my ($last) = grep { defined $_->{src} } reverse @steps;
         my $src = $last ? $last->{src} : undef;
         my $from = $last ? $last->{line} : 0;
 
         unless ($src) {    # упали до первого шага - берём исходник текущего тест-модуля
-            my $script = eval { $autotest::current_test->{script} };
             $src = get_var('CASEDIR', '.') . "/$script" if $script;
         }
 
-        my ($failed_step) = grep { $_->{status} eq 'failed' && defined $_->{file} } @STEPS;
+        my ($failed_step) = grep { $_->{status} eq 'failed' && defined $_->{file} } @steps;
         my $cause = $failed_step ? "step '$failed_step->{name}' failed" : 'the test failed outside of a step';
 
-        my %seen = map { $_->{name} => 1 } @STEPS;
+        my %seen = map { $_->{name} => 1 } @steps;
         for my $p (_planned_steps_after($src, $from)) {
             next if $seen{$p->{name}}++;
             (my $file = $src) =~ s{^.*/(?=(?:tests|lib)/)}{};
-            push @STEPS, {
+            push @steps, {
                 name => $p->{name}, status => 'skipped', start => time, duration => 0,
                 location => "$file:$p->{line}", file => $file, line => $p->{line},
                 actions => [], reason => "Skipped because $cause",
@@ -269,20 +281,20 @@ sub write_step_report {
         }
     }
 
-    my $failures = grep { $_->{status} eq 'failed' } @STEPS;
-    my $skipped = grep { $_->{status} eq 'skipped' } @STEPS;
+    my $failures = grep { $_->{status} eq 'failed' } @steps;
+    my $skipped = grep { $_->{status} eq 'skipped' } @steps;
     my $total = 0;
-    $total += $_->{duration} for @STEPS;
+    $total += $_->{duration} for @steps;
 
     # Время начала набора = самый ранний start (UTC, ISO8601 без часового пояса, как в схеме JUnit).
-    my $t0 = @STEPS ? (sort { $a <=> $b } map { $_->{start} } @STEPS)[0] : time;
+    my $t0 = @steps ? (sort { $a <=> $b } map { $_->{start} } @steps)[0] : time;
     my $timestamp = strftime('%Y-%m-%dT%H:%M:%S', gmtime $t0);
 
     my $xml = sprintf qq{<?xml version="1.0" encoding="UTF-8"?>\n<testsuites>\n}
       . qq{<testsuite name="%s" tests="%d" failures="%d" skipped="%d" time="%.3f" timestamp="%s">\n},
-      xml_escape($suite), scalar @STEPS, $failures, $skipped, $total, $timestamp;
+      xml_escape($suite), scalar @steps, $failures, $skipped, $total, $timestamp;
 
-    for my $s (@STEPS) {
+    for my $s (@steps) {
         my $failed = $s->{status} eq 'failed';
         my $is_skipped = $s->{status} eq 'skipped';
         my @out = @{$s->{actions} // []};
@@ -323,7 +335,7 @@ sub write_step_report {
 
     my $dir = path('ulogs')->make_path;
     $dir->child("junit-$suite.xml")->spew(encode('UTF-8', $xml));
-    $dir->child("steps-$suite.json")->spew(encode_json({suite => $suite, steps => \@STEPS}));
+    $dir->child("steps-$suite.json")->spew(encode_json({suite => $suite, steps => \@steps}));
     diag("[STEP] report written: ulogs/junit-$suite.xml, ulogs/steps-$suite.json");
     return;
 }

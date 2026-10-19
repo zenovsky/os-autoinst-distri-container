@@ -36,8 +36,6 @@ sub expect_fail {
 sub run {
     add_step_secret($test_pass);
 
-    #barrier_wait 'net_ready';
-
     step 'Preconditions. Ping server' => sub {
         run_cmd "Checking connectivity to the server $server_ip (4 ICMP echo requests)" => "ping -c 4 $server_ip";
     };

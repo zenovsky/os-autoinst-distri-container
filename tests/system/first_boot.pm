@@ -24,4 +24,6 @@ sub test_flags {
     return {fatal => 1};
 }
 
+sub post_fail_hook { write_step_report('first-system-boot', failed => 1) }
+
 1;

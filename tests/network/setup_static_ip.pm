@@ -71,6 +71,5 @@ sub run {
 }
 
 sub post_fail_hook { write_step_report('network-setup', failed => 1) }
-sub post_run_hook { write_step_report('network-setup') }
 
 1;
