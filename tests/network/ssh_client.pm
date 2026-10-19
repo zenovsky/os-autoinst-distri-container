@@ -4,17 +4,13 @@
 # sshd restart and server reboot.
 # Qase case: "OpenSSH Client - Проверка методов аутентификации, SSH-ключей и безопасности"
 # Paired module: ssh_server.pm — runs on a second machine in the same
-# job group:
-# TEST=openssh
 use Mojo::Base 'basetest';
 use testapi;
 use lockapi;
 use mmapi;
 use StepReport;
 
-my $server_ip = get_var('SSH_SERVER_IP', '172.16.2.10');
-my $client_ip = get_var('SSH_CLIENT_IP', '172.16.2.11');
-my $dns_ip = get_var('DNS_IP');
+my $server_ip = get_var('SSH_SERVER_IP');
 
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
@@ -39,16 +35,6 @@ sub expect_fail {
 
 sub run {
     add_step_secret($test_pass);
-
-    # --- Preconditions ---
-    step 'Preconditions. Network setup' => sub {
-        run_cmd "Adding static connection ens4-static ($client_ip/15, gateway 172.16.2.2, DNS $dns_ip)" =>
-          'nmcli con add type ethernet ifname ens4 con-name ens4-static '
-          . "ipv4.addresses $client_ip/15 ipv4.gateway 172.16.2.2 "
-          . "ipv4.dns $dns_ip ipv4.method manual";
-        run_cmd 'Activating connection ens4-static' => 'nmcli con up ens4-static';
-        run_cmd "Setting nameserver $dns_ip in /etc/resolv.conf" => "echo 'nameserver $dns_ip' > /etc/resolv.conf";
-    };
 
     barrier_wait 'net_ready';
 
@@ -216,7 +202,7 @@ EOT
     };
 }
 
-sub post_fail_hook { write_step_report('openssh', failed => 1) }
-sub post_run_hook { write_step_report('openssh') }
+sub post_fail_hook { write_step_report('openssh-client', failed => 1) }
+sub post_run_hook { write_step_report('openssh-client') }
 
 1;

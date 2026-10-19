@@ -1,7 +1,11 @@
-name: network-client
+name: openssh-client
 description: >
-    Checking OpenSSH client-server connectivity.
+    Checking OpenSSH client connectivity.
 vars:
+  SSH_SERVER_IP: 172.16.2.10
+  SSH_CLIENT_IP: 172.16.2.11
+  STATIC_IP: '%SSH_SERVER_IP%'
 schedule:
   - tests/system/first_boot.pm
+  - tests/network/setup_static_ip.pm
   - tests/network/ssh_client.pm
