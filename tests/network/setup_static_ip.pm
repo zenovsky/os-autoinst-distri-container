@@ -40,7 +40,24 @@ sub run {
         $add .= " ipv4.dns $dns" if $dns;
         run_cmd "Adding static connection $con ($ip/$prefix, gateway $gateway" . ($dns ? ", DNS $dns" : '') . ')' => $add;
 
-        run_cmd "Activating connection $con" => "nmcli con up $con";
+        # Fail early with a clear message if the NIC is missing, instead of waiting for the NM timeout
+        run_cmd "Checking that interface $iface exists" => "ip link show $iface";
+
+        my $ok = eval {
+            run_cmd "Activating connection $con" => "nmcli -w 30 con up $con", timeout => 60;
+            1;
+        };
+        my $err = $@;
+        unless ($ok) {
+            # Collect the facts needed to tell "no carrier" from "wrong NIC" from "conflicting profile"
+            probe_cmd 'Diagnostics: link state of all interfaces' => 'ip -br link';
+            probe_cmd 'Diagnostics: addresses' => 'ip -br addr';
+            probe_cmd 'Diagnostics: NetworkManager devices' => 'nmcli -f DEVICE,TYPE,STATE,CONNECTION device status';
+            probe_cmd "Diagnostics: carrier of $iface (1 = link up)" => "cat /sys/class/net/$iface/carrier";
+            probe_cmd 'Diagnostics: NetworkManager journal' => 'journalctl -u NetworkManager -n 40 --no-pager';
+            die $err;
+        }
+
         run_cmd "Checking that $iface has the address $ip" => "ip -4 addr show $iface | grep -w 'inet $ip/$prefix'";
 
         run_cmd "Setting nameserver $dns in /etc/resolv.conf" => "echo 'nameserver $dns' > /etc/resolv.conf" if $dns;
@@ -53,7 +70,7 @@ sub run {
     }
 }
 
-sub post_fail_hook { write_step_report('setup-static-ip', failed => 1) }
-sub post_run_hook { write_step_report('setup-static-ip') }
+sub post_fail_hook { write_step_report('network-setup', failed => 1) }
+sub post_run_hook { write_step_report('network-setup') }
 
 1;
