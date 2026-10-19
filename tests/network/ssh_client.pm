@@ -1,8 +1,8 @@
 # openQA test
-# Summary: OpenSSH (Client) — installation, password/key authentication,
-# check for invalid key login restrictions, checks after
-# service restarts, system reboots, and package updates.
-# Source:
+# Summary: OpenSSH (Client) — password/key authentication, host key handling,
+# invalid key and weak cipher rejection, scp/sftp, StrictModes, checks after
+# sshd restart and server reboot.
+# Qase case: "OpenSSH Client - Проверка методов аутентификации, SSH-ключей и безопасности"
 # Paired module: ssh_server.pm — runs on a second machine in the same
 # job group:
 # TEST=openssh
@@ -18,6 +18,24 @@ my $dns_ip = get_var('DNS_IP');
 
 my $test_user = get_var('SSH_USER', 'ssh_test_user');
 my $test_pass = get_var('SSH_USER_PASSWORD', 'TestPassword123!');
+
+my $key = '~/.ssh/id_ed25519_test';
+my $wrong_key = '~/.ssh/id_ed25519_wrong';
+my $target = "$test_user\@$server_ip";
+my $askpass = '/tmp/askpass.sh';
+
+# Environment that makes ssh/ssh-copy-id/scp take the password from $askpass instead of the terminal.
+# Lets us test password authentication without needles for the password prompt.
+sub askpass_env {
+    my ($pw) = @_;
+    return "ASKPASS_PW='$pw' SSH_ASKPASS=$askpass SSH_ASKPASS_REQUIRE=force";
+}
+
+# Runs $cmd, requires a NON-zero exit code and $pattern (case-insensitive) in its combined output.
+sub expect_fail {
+    my ($desc, $cmd, $pattern, %opt) = @_;
+    return run_cmd $desc => "out=\$($cmd 2>&1); rc=\$?; test \$rc -ne 0 && echo \"\$out\" | grep -qi '$pattern'", %opt;
+}
 
 sub run {
     add_step_secret($test_pass);
@@ -38,177 +56,167 @@ sub run {
         run_cmd "Checking connectivity to the server $server_ip (4 ICMP echo requests)" => "ping -c 4 $server_ip";
     };
 
+    step 'Preconditions. SSH_ASKPASS helper' => sub {
+        # One-line printf: writes a tiny script that prints $ASKPASS_PW (the password never lands in the file)
+        my $mk = <<'EOT';
+printf '#!/bin/sh\nprintf "%%s\\n" "$ASKPASS_PW"\n' > /tmp/askpass.sh && chmod 700 /tmp/askpass.sh
+EOT
+        chomp $mk;
+        run_cmd 'Creating a helper that supplies the password to ssh non-interactively' => $mk;
+    };
+
     barrier_wait 'user_ready';
+    barrier_wait 'server_ready';
 
-    # --- Step 1: Install the package ---
-    step 'Step 1. Install the package' => sub {
-        run_cmd 'Installing the openssh package with dnf' => 'cat /etc/resolv.conf', timeout => 300, quiet => 1;
-    };
-
-    # --- Step 2: sshd port configuration ---
-    step 'Step 2. sshd port configuration' => sub {
-        run_cmd 'Checking that the effective sshd configuration uses port 22' => 'sshd -T | grep "port 22"';
-    };
-
-    # --- Step 3: Start the service ---
-    step 'Step 3. Start the service' => sub {
-        run_cmd 'Starting the sshd service' => 'systemctl start sshd';
-        run_cmd 'Checking that the sshd service is active' => 'systemctl is-active sshd';
-    };
-
-    # --- Step 4: Enable sshd autostart ---
-    step 'Step 4. Enable sshd autostart' => sub {
-        run_cmd 'Enabling the sshd service at boot and starting it now' => 'systemctl enable --now sshd';
-        run_cmd 'Checking that the sshd service is enabled' => 'systemctl is-enabled sshd';
-    };
-
-    # --- Step 5: sshd listens on port 22 ---
-    step 'Step 5. sshd listens on port 22' => sub {
-        run_cmd 'Checking that something listens on TCP port 22' => 'ss -lntp | grep ":22"';
-    };
-
-    # --- Step 6: Firewall allows ss ---
-    step 'Step 6. Firewall allows ss' => sub {
-        run_cmd 'Checking that firewalld allows the ssh service' => 'firewall-cmd --list-services | grep "ss"';
-    };
-
-    barrier_wait 'package_ready';
-
-    # --- Step 7: Make sure port 22 is available on the server---
-    step 'Step 7. Port 22 is available on the server' => sub {
+    # --- Step 1: Port 22 is reachable on the server ---
+    step 'Step 1. Port 22 is available on the server' => sub {
         run_cmd "Scanning $server_ip:22 and looking for the OpenSSH banner" =>
           "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
     };
 
-    # --- Step 8: Connecting with a password ---
-    step 'Step 8. Password login and whoami/$HOME check' => sub {
-        step_log "Opening an SSH session to $test_user\@$server_ip";
-        type_string "ssh -o StrictHostKeyChecking=no $test_user\@$server_ip\n";
-        step_log 'Waiting for the password prompt';
-        assert_screen 'ssh-password-prompt', 30;
-        step_log "Entering the password of $test_user";
-        type_string "$test_pass\n";
-        wait_still_screen(3);
-        step_log "Running whoami and expecting $test_user";
-        type_string "whoami\n";
-        assert_screen 'whoami-is-test-user', 30;
-        step_log "Printing \$HOME and expecting the home directory of $test_user";
-        type_string "echo \"\$HOME\"\n";
-        assert_screen 'home-is-test-user-dir', 30;
-        step_log 'Closing the SSH session';
-        enter_cmd 'exit';
+    # --- Step 2: Password authentication (PAM) ---
+    step 'Step 2. Password authentication (PAM)' => sub {
+        my $out = run_cmd "Logging in to $target with the password and running whoami && pwd" =>
+          askpass_env($test_pass)
+          . " ssh -o StrictHostKeyChecking=no -o PubkeyAuthentication=no $target 'whoami && pwd'";
+        die "Expected '$test_user' in the output\n" unless $out =~ /^\Q$test_user\E$/m;
+        die "Expected '/home/$test_user' in the output\n" unless $out =~ m{^/home/\Q$test_user\E$}m;
     };
 
-    # --- Step 9: Generate a key ---
-    step 'Step 9. Generate a key' => sub {
-        run_cmd 'Generating an ed25519 key pair ~/.ssh/id_ed25519_test without a passphrase' =>
-          'ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test -N ""';
-        run_cmd 'Checking that the private and public key files exist' =>
-          'ls -l ~/.ssh/id_ed25519_test ~/.ssh/id_ed25519_test.pub';
+    # --- Step 3: Host key stored in known_hosts ---
+    step 'Step 3. Server host key is saved in known_hosts' => sub {
+        run_cmd "Looking up $server_ip in ~/.ssh/known_hosts" => "ssh-keygen -F $server_ip";
     };
 
-    # --- Step 10: Installing the public key on the server ---
-    step 'Step 10. Install the public key on the server' => sub {
-        step_log "Copying the public key to $test_user\@$server_ip with ssh-copy-id";
-        type_string "ssh-copy-id -i ~/.ssh/id_ed25519_test.pub $test_user\@$server_ip\n";
-        step_log 'Waiting for the password prompt';
-        assert_screen 'ssh-password-prompt', 30;
-        step_log "Entering the password of $test_user";
-        type_string "$test_pass\n";
-        wait_still_screen(3);
+    # --- Step 4: Wrong password (PAM / faillock) ---
+    step 'Step 4. Wrong password is rejected' => sub {
+        expect_fail "Trying 3 times to log in to $target with a wrong password" =>
+          askpass_env('WrongPassword!1')
+          . " ssh -o StrictHostKeyChecking=no -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=3 $target",
+          'Permission denied, please try again';
     };
 
-    barrier_wait 'client_key_installed';
+    barrier_wait 'failed_logins_done';
 
-    # --- Step 11: Key-based login (password auth disabled) ---
-    step 'Step 11. Key-based login (password auth disabled)' => sub {
-        run_cmd "Logging in to $test_user\@$server_ip with the key (password authentication disabled) and running whoami" =>
-          'ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no '
-          . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'whoami'";
+    # --- Step 5: Generate an Ed25519 key pair ---
+    step 'Step 5. Generate an Ed25519 key pair' => sub {
+        run_cmd "Generating an ed25519 key pair $key without a passphrase" => "ssh-keygen -t ed25519 -f $key -N ''";
+        run_cmd 'Checking that the private and public key files exist' => "ls -l $key*";
+        run_cmd 'Checking that the private key has mode 600' => qq{test "\$(stat -c %a $key)" = 600};
     };
 
-    # --- Step 12: Connection with an invalid key should be rejected ---
-    step 'Step 12. Invalid key is rejected' => sub {
+    barrier_wait 'faillock_checked';
+
+    # --- Step 6: Copy the public key to the server ---
+    step 'Step 6. Copy the public key to the server' => sub {
+        my $out = run_cmd "Copying the public key to $target with ssh-copy-id (password from the helper)" =>
+          askpass_env($test_pass) . " ssh-copy-id -i $key.pub $target";
+        die "ssh-copy-id did not report 'Number of key(s) added: 1'\n" unless $out =~ /Number of key\(s\) added:\s*1/;
+    };
+
+    # --- Step 7: Key-based login ---
+    step 'Step 7. Key-based login (password authentication disabled)' => sub {
+        my $out = run_cmd "Logging in to $target with the key without a password and running whoami" =>
+          "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=no $target 'whoami'";
+        die "Expected '$test_user' in the output\n" unless $out =~ /^\Q$test_user\E$/m;
+    };
+
+    # --- Step 8: SELinux context of authorized_keys on the server ---
+    step 'Step 8. SELinux context of authorized_keys' => sub {
+        run_cmd 'Checking that authorized_keys on the server has the ssh_home_t type' =>
+          "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'ls -Za ~/.ssh/authorized_keys' | grep 'ssh_home_t'";
+    };
+
+    # --- Step 9: Invalid key is rejected ---
+    step 'Step 9. Invalid key is rejected' => sub {
         run_cmd 'Generating a second key pair that is not installed on the server' =>
-          'ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_wrong -N ""';
-        run_cmd 'Trying to log in with the wrong key and expecting "Permission denied"' =>
-          'ssh -i ~/.ssh/id_ed25519_wrong -o PasswordAuthentication=no '
-          . "-o StrictHostKeyChecking=no $test_user\@$server_ip 2>&1 | grep -i 'Permission denied'";
+          "ssh-keygen -t ed25519 -f $wrong_key -N ''";
+        expect_fail 'Trying to log in with the wrong key and expecting "Permission denied"' =>
+          "ssh -i $wrong_key -o PasswordAuthentication=no -o StrictHostKeyChecking=no $target 'whoami'",
+          'Permission denied';
     };
 
-    barrier_wait 'client_key_checks_done';
+    # --- Step 10: scp and sftp ---
+    step 'Step 10. scp transfer and sftp subsystem' => sub {
+        my $ssh_opts = "-i $key -o BatchMode=yes -o StrictHostKeyChecking=yes";
+        run_cmd 'Creating a 1 MiB random file' => 'dd if=/dev/urandom of=/tmp/scp_src.bin bs=1M count=1';
+        run_cmd 'Uploading the file to the server with scp' =>
+          "scp $ssh_opts /tmp/scp_src.bin $target:/home/$test_user/scp_test.bin";
+        run_cmd 'Downloading the file back with scp' =>
+          "scp $ssh_opts $target:/home/$test_user/scp_test.bin /tmp/scp_back.bin";
+        run_cmd 'Comparing the original and the downloaded file (cmp)' => 'cmp /tmp/scp_src.bin /tmp/scp_back.bin';
+        run_cmd 'Running ls over sftp' => "printf 'ls\\n' | sftp -b - $ssh_opts $target";
+        run_cmd 'Removing the test file on the server' => "ssh $ssh_opts $target 'rm -f scp_test.bin'";
+    };
+
+    # --- Step 11: Weak cipher is rejected ---
+    step 'Step 11. Weak cipher is rejected' => sub {
+        expect_fail 'Trying to connect with the aes128-cbc cipher and expecting "no matching cipher found"' =>
+          "ssh -i $key -o PasswordAuthentication=no -o Ciphers=aes128-cbc $target whoami",
+          'no matching cipher';
+    };
+
+    barrier_wait 'client_checks_done';
+
+    # --- Step 12: StrictModes: insecure ~/.ssh permissions on the server ---
+    step 'Step 12. Insecure ~/.ssh permissions on the server' => sub {
+        barrier_wait 'perms_broken';
+
+        # The barrier must be passed even if the check fails, otherwise the server waits forever
+        my $ok = eval {
+            expect_fail 'Key login must be refused while ~/.ssh on the server is world-writable' =>
+              "ssh -i $key -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target whoami",
+              'Permission denied';
+            1;
+        };
+        my $err = $@;
+        barrier_wait 'client_perm_checked';
+        barrier_wait 'perms_restored';
+        die $err unless $ok;
+
+        my $out = run_cmd 'After the permissions are restored, key login must work again' =>
+          "ssh -i $key -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target whoami";
+        die "Expected '$test_user' in the output\n" unless $out =~ /^\Q$test_user\E$/m;
+    };
+
     barrier_wait 'server_sshd_restarted';
 
-    # --- Step 13: Verifying SSH after restarting the service ---
-    step 'Step 13. SSH works after the service restart' => sub {
-        run_cmd 'Logging in with the key after the sshd restart on the server' =>
-          'ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no '
-          . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK'";
+    # --- Step 13: Keys keep working after sshd restart ---
+    step 'Step 13. SSH works after the sshd restart' => sub {
+        my $ok = eval {
+            run_cmd 'Logging in with the key after the sshd restart on the server' =>
+              "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'echo SSH_OK' | grep -x SSH_OK";
+            1;
+        };
+        my $err = $@;
+        barrier_wait 'client_restart_checked';
+        die $err unless $ok;
     };
 
     barrier_wait 'server_rebooted';
 
-    # --- Step 14: Verifying SSH after system reboot ---
-    step 'Step 14. SSH works after the system reboot' => sub {
-        run_cmd 'Logging in with the key after the server reboot' =>
-          'ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no '
-          . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_REBOOT'";
+    # --- Step 14: Keys keep working after server reboot ---
+    step 'Step 14. SSH works after the server reboot' => sub {
+        my $ok = eval {
+            run_cmd 'Logging in with the key after the server reboot' =>
+              "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'echo SSH_OK_REBOOT' | grep -x SSH_OK_REBOOT";
+            1;
+        };
+        my $err = $@;
+        barrier_wait 'client_reboot_checked';
+        die $err unless $ok;
     };
 
-    barrier_wait 'client_post_reboot_done';
-    barrier_wait 'server_updated';
-
-    # ---- Step 15: SSH session after package update on the server ---
-    step 'Step 15. SSH works after the package update' => sub {
-        run_cmd 'Logging in with the key after the openssh update on the server' =>
-          'ssh -i ~/.ssh/id_ed25519_test -o PasswordAuthentication=no '
-          . "-o StrictHostKeyChecking=no $test_user\@$server_ip 'echo SSH_OK_AFTER_UPDATE'";
+    # --- Step 15: Client audit and security logs ---
+    step 'Step 15. Check client logs and AVC denials' => sub {
+        run_cmd 'Checking the journal for error/failed/fatal entries' =>
+          q{! journalctl -u sshd --no-pager -n 100 | grep -iE 'error|failed|fatal'};
+        run_cmd 'Checking for the absence of SELinux AVC denials since boot' =>
+          q{! ausearch -m AVC,USER_AVC -ts boot | grep -q denied};
     };
-
-    barrier_wait 'client_final_checks_done';
-
-    # --- Step 16: Checking logs for errors ---
-    step 'Step 16. Check logs for errors' => sub {
-        step_log 'Reading the last 100 lines of the sshd journal';
-        my $logs = script_output 'journalctl -u sshd --no-pager -n 100';
-        step_log 'Checking the journal for "Failed"", "fatal" or "error" entries';
-        die "sshd logs contain errors:\n$logs"
-          if $logs =~ /Failed|fatal|error/i;
-    };
-
-    # --- Step 17: General status of the OS: Verify the integrity of the installed package ---
-    step 'Step 17. Verify the integrity of the installed package' => sub {
-        run_cmd 'Verifying the openssh package files (rpm -V)' => 'rpm -V openssh', quiet => 1;
-    };
-
-    # --- Step 18: General status of the OS: Verify that SELinux is enabled and running in Enforcing mode.  ---
-    step 'Step 18. Verify that SELinux is enabled' => sub {
-        run_cmd 'Checking that SELinux is in Enforcing mode' => 'getenforce | grep "Enforcing"';
-    };
-
-    # --- Step 19: General status of the OS: Verification that SELinux file labels match the policy.  ---
-    step 'Step 19. Verification SELinux file labels match the policy' => sub {
-        run_cmd 'Verification SELinux file labels match the policy' => '! restorecon -nR / 2>&1 | grep -i "would relabel"';
-    };
-
-    # --- Step 20: General status of the OS: Checking for the absence of SELinux AVC denials since boot.  ---
-    step 'Step 20. Checking for the absence of SELinux AVC denials' => sub {
-        run_cmd 'Checking for the absence of SELinux AVC denials' => '! ausearch -m AVC,USER_AVC -ts boot | grep -q denied';
-    };
-
-    # --- Step 21: General status of the OS: Checking for failed systemd units.  ---
-    step 'Step 21. Checking for failed systemd units' => sub {
-        run_cmd 'Checking that there are no failed systemd units' => 'systemctl --failed | grep "0 loaded units listed"';
-    };
-
-    # --- Step 22: General status of the OS: Checking DNF package database integrity.  ---
-    step 'Step 22. Checking DNF package database integrity' => sub {
-        run_cmd 'Checking the package database consistency (dnf check)' => 'cat /etc/resolv.conf';
-    };
-
 }
 
-sub post_fail_hook { write_step_report('openssh-client', failed => 1) }
-sub post_run_hook { write_step_report('openssh-client') }
+sub post_fail_hook { write_step_report('openssh', failed => 1) }
+sub post_run_hook { write_step_report('openssh') }
 
 1;
