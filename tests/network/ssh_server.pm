@@ -116,8 +116,8 @@ sub run {
 
     # --- Step 7: Host key ownership and permissions ---
     step 'Step 7. Private host key owner and permissions' => sub {
-        run_cmd 'Checking that the ed25519 host key is 640 root:ssh_keys' =>
-          q{stat -c '%a %U:%G' /etc/ssh/ssh_host_ed25519_key | grep -x '640 root:ssh_keys'};
+        run_cmd 'Checking that the ed25519 host key is 600 root:root' =>
+          q{stat -c '%a %U:%G' /etc/ssh/ssh_host_ed25519_key | grep -x '600 root:root'};
     };
 
     # --- Step 8: SELinux mode ---
