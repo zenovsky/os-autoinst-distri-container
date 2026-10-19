@@ -21,7 +21,6 @@ sub run {
 
     # Synchronisation points shared with ssh_client.pm (names must match on both sides)
     barrier_create($_, 2) for qw(
-      net_ready
       user_ready
       server_ready
       failed_logins_done
@@ -36,7 +35,7 @@ sub run {
       client_reboot_checked
     );
 
-    barrier_wait 'net_ready';
+    #barrier_wait 'net_ready';
 
     step 'Precondition. Ping client' => sub {
         run_cmd "Checking connectivity to the client $client_ip (4 ICMP echo requests)" => "ping -c 4 $client_ip";
