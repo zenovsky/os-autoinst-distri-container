@@ -36,7 +36,8 @@ sub expect_fail {
 sub run {
     add_step_secret($test_pass);
 
-    step 'Preconditions. Ping server' => sub {
+    # Обеспечена сетевая связанность между машинами SERVER и CLIENT:
+    step 'Ping server' => sub {
         run_cmd "Checking connectivity to the server $server_ip (4 ICMP echo requests)" => "ping -c 4 $server_ip";
     };
 
@@ -52,14 +53,14 @@ EOT
     barrier_wait 'user_ready';
     barrier_wait 'server_ready';
 
-    # --- Step 1: Port 22 is reachable on the server ---
-    step 'Step 1. Port 22 is available on the server' => sub {
+    # --- Проверка доступности 22 порта на сервере ---
+    step 'Checking the availability of port 22 on server' => sub {
         run_cmd "Scanning $server_ip:22 and looking for the OpenSSH banner" =>
           "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
     };
 
-    # --- Step 2: Password authentication (PAM) ---
-    step 'Step 2. Password authentication (PAM)' => sub {
+    # --- Проверка аутентификации по паролю (PAM-аутентификация) ---
+    step 'Password-based authentication check (PAM authentication)' => sub {
         my $out = run_cmd "Logging in to $target with the password and running whoami && pwd" =>
           askpass_env($test_pass)
           . " ssh -o StrictHostKeyChecking=no -o PubkeyAuthentication=no $target 'whoami && pwd'";
@@ -67,13 +68,13 @@ EOT
         die "Expected '/home/$test_user' in the output\n" unless $out =~ m{^/home/\Q$test_user\E$}m;
     };
 
-    # --- Step 3: Host key stored in known_hosts ---
-    step 'Step 3. Server host key is saved in known_hosts' => sub {
+    # --- Проверка сохранения host key сервера в known_hosts ---
+    step 'Verifying that server host key is saved in known_hosts' => sub {
         run_cmd "Looking up $server_ip in ~/.ssh/known_hosts" => "ssh-keygen -F $server_ip";
     };
 
-    # --- Step 4: Wrong password (PAM / faillock) ---
-    step 'Step 4. Wrong password is rejected' => sub {
+    # --- Проверка работы PAM faillock на клиенте/сервере (Неверный пароль) ---
+    step 'Verifying PAM faillock functionality' => sub {
         expect_fail "Trying 3 times to log in to $target with a wrong password" =>
           askpass_env('WrongPassword!1')
           . " ssh -o StrictHostKeyChecking=no -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=3 $target",
@@ -82,8 +83,8 @@ EOT
 
     barrier_wait 'failed_logins_done';
 
-    # --- Step 5: Generate an Ed25519 key pair ---
-    step 'Step 5. Generate an Ed25519 key pair' => sub {
+    # --- Генерация пары SSH-ключей Ed25519 ---
+    step 'Generating an Ed25519 SSH key pair' => sub {
         run_cmd "Generating an ed25519 key pair $key without a passphrase" => "ssh-keygen -t ed25519 -f $key -N ''";
         run_cmd 'Checking that the private and public key files exist' => "ls -l $key*";
         run_cmd 'Checking that the private key has mode 600' => qq{test "\$(stat -c %a $key)" = 600};
@@ -91,28 +92,28 @@ EOT
 
     barrier_wait 'faillock_checked';
 
-    # --- Step 6: Copy the public key to the server ---
-    step 'Step 6. Copy the public key to the server' => sub {
+    # --- Копирование публичного ключа на сервер ---
+    step 'Copying the public key to server' => sub {
         my $out = run_cmd "Copying the public key to $target with ssh-copy-id (password from the helper)" =>
           askpass_env($test_pass) . " ssh-copy-id -i $key.pub $target";
         die "ssh-copy-id did not report 'Number of key(s) added: 1'\n" unless $out =~ /Number of key\(s\) added:\s*1/;
     };
 
-    # --- Step 7: Key-based login ---
-    step 'Step 7. Key-based login (password authentication disabled)' => sub {
+    # --- Проверка аутентификации по ключу (без пароля) ---
+    step 'Key authentication check (without password)' => sub {
         my $out = run_cmd "Logging in to $target with the key without a password and running whoami" =>
           "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=no $target 'whoami'";
         die "Expected '$test_user' in the output\n" unless $out =~ /^\Q$test_user\E$/m;
     };
 
-    # --- Step 8: SELinux context of authorized_keys on the server ---
-    step 'Step 8. SELinux context of authorized_keys' => sub {
+    # --- Проверка контекстов SELinux для добавленного ключа на сервере ---
+    step 'Checking SELinux contexts for an added key on server' => sub {
         run_cmd 'Checking that authorized_keys on the server has the ssh_home_t type' =>
           "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'ls -Za ~/.ssh/authorized_keys' | grep 'ssh_home_t'";
     };
 
-    # --- Step 9: Invalid key is rejected ---
-    step 'Step 9. Invalid key is rejected' => sub {
+    # --- Отклонение доступа при использовании некорректного ключа ---
+    step 'Access denied when using an incorrect key' => sub {
         run_cmd 'Generating a second key pair that is not installed on the server' =>
           "ssh-keygen -t ed25519 -f $wrong_key -N ''";
         expect_fail 'Trying to log in with the wrong key and expecting "Permission denied"' =>
@@ -120,8 +121,8 @@ EOT
           'Permission denied';
     };
 
-    # --- Step 10: scp and sftp ---
-    step 'Step 10. scp transfer and sftp subsystem' => sub {
+    # --- Передача файла через scp и проверка подсистемы sftp ---
+    step 'Transferring a file via SCP and verifying SFTP subsystem' => sub {
         my $ssh_opts = "-i $key -o BatchMode=yes -o StrictHostKeyChecking=yes";
         run_cmd 'Creating a 1 MiB random file' => 'dd if=/dev/urandom of=/tmp/scp_src.bin bs=1M count=1';
         run_cmd 'Uploading the file to the server with scp' =>
@@ -133,8 +134,8 @@ EOT
         run_cmd 'Removing the test file on the server' => "ssh $ssh_opts $target 'rm -f scp_test.bin'";
     };
 
-    # --- Step 11: Weak cipher is rejected ---
-    step 'Step 11. Weak cipher is rejected' => sub {
+    # --- Отказ при использовании слабого шифра ---
+    step 'Failure when using a weak cipher' => sub {
         expect_fail 'Trying to connect with the aes128-cbc cipher and expecting "no matching cipher found"' =>
           "ssh -i $key -o PasswordAuthentication=no -o Ciphers=aes128-cbc $target whoami",
           'no matching cipher';
@@ -142,8 +143,8 @@ EOT
 
     barrier_wait 'client_checks_done';
 
-    # --- Step 12: StrictModes: insecure ~/.ssh permissions on the server ---
-    step 'Step 12. Insecure ~/.ssh permissions on the server' => sub {
+    # --- Отказ при небезопасных правах ~/.ssh на сервере ---
+    step 'Access denied due to insecure permissions on ~/.ssh on server' => sub {
         barrier_wait 'perms_broken';
 
         # The barrier must be passed even if the check fails, otherwise the server waits forever
@@ -165,8 +166,8 @@ EOT
 
     barrier_wait 'server_sshd_restarted';
 
-    # --- Step 13: Keys keep working after sshd restart ---
-    step 'Step 13. SSH works after the sshd restart' => sub {
+    # --- Проверка сохранения работоспособности ключей после перезапуска sshd на сервере ---
+    step 'Verifying that keys remain functional after restarting sshd on server' => sub {
         my $ok = eval {
             run_cmd 'Logging in with the key after the sshd restart on the server' =>
               "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'echo SSH_OK' | grep -x SSH_OK";
@@ -179,8 +180,8 @@ EOT
 
     barrier_wait 'server_rebooted';
 
-    # --- Step 14: Keys keep working after server reboot ---
-    step 'Step 14. SSH works after the server reboot' => sub {
+    # --- Проверка сохранения работоспособности ключей после перезагрузки сервера ---
+    step 'Checking whether keys remain functional after a server reboot' => sub {
         my $ok = eval {
             run_cmd 'Logging in with the key after the server reboot' =>
               "ssh -i $key -o PasswordAuthentication=no -o StrictHostKeyChecking=yes $target 'echo SSH_OK_REBOOT' | grep -x SSH_OK_REBOOT";
@@ -191,8 +192,8 @@ EOT
         die $err unless $ok;
     };
 
-    # --- Step 15: Client audit and security logs ---
-    step 'Step 15. Check client logs and AVC denials' => sub {
+    # --- Проверка логов аудита и безопасности на клиенте ---
+    step 'Checking audit and security logs on client' => sub {
         run_cmd 'Checking the journal for error/failed/fatal entries' =>
           q{! journalctl -u sshd --no-pager -n 100 | grep -iE 'error|failed|fatal'};
         run_cmd 'Checking for the absence of SELinux AVC denials since boot' =>
