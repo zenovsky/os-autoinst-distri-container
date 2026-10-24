@@ -1,4 +1,4 @@
-name: openssh-client
+name: openssh-server
 description: >
     Checking OpenSSH server connectivity.
 vars:

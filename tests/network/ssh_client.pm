@@ -41,14 +41,14 @@ sub run {
         run_cmd "Checking connectivity to the server $server_ip (4 ICMP echo requests)" => "ping -c 4 $server_ip";
     };
 
-    step 'Preconditions. SSH_ASKPASS helper' => sub {
-        # One-line printf: writes a tiny script that prints $ASKPASS_PW (the password never lands in the file)
-        my $mk = <<'EOT';
+    # Technical helper of the autotest, not a step of the Qase case, so it is not a report step.
+    # Writes a tiny script that prints $ASKPASS_PW (the password never lands in the file), which lets
+    # ssh/ssh-copy-id/scp take the password non-interactively via SSH_ASKPASS.
+    my $mk = <<'EOT';
 printf '#!/bin/sh\nprintf "%%s\\n" "$ASKPASS_PW"\n' > /tmp/askpass.sh && chmod 700 /tmp/askpass.sh
 EOT
-        chomp $mk;
-        run_cmd 'Creating a helper that supplies the password to ssh non-interactively' => $mk;
-    };
+    chomp $mk;
+    assert_script_run $mk;
 
     barrier_wait 'user_ready';
     barrier_wait 'server_ready';
