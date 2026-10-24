@@ -54,7 +54,7 @@ EOT
     barrier_wait 'server_ready';
 
     # --- Проверка доступности 22 порта на сервере ---
-    step 'Step 1. Checking the availability of port 22 on server' => sub {
+    step 'Проверка доступности 22 порта на сервере' => sub {
         run_cmd "Scanning $server_ip:22 and looking for the OpenSSH banner" =>
           "ssh-keyscan -p 22 -T 2 $server_ip 2>&1 | grep -q OpenSSH";
     };
