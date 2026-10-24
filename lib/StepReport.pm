@@ -108,27 +108,19 @@ sub _exec_capture {
     my ($cmd, %opt) = @_;
     my $timeout = $opt{timeout} // $CMD_TIMEOUT;
     my $marker = 'STEPCMD_' . int(rand(1_000_000)) . '_' . time;
+    # Файл один на все команды: `>` перезаписывает его, поэтому мусор в /tmp не копится
+    # и отдельный rm -f не нужен. Маркер остаётся уникальным для каждой команды, так что
+    # устаревший вывод от предыдущей команды не будет принят за код возврата текущей.
+    my $tmp = '/tmp/stepreport_cmd.log';
+# Оборачиваем исходную команду как есть: она уже полноценная shell-строка (с пайпами и т.п.).
+    my $wrapped = "{ $cmd ; } > $tmp 2>&1; echo ${marker}_RC=\$? >> $tmp";
+    testapi::script_run($wrapped, timeout => $timeout);
 
-    # script_output запускает текст как bash-скрипт с -e и pipefail. Без `set +e` упавшая
-    # команда оборвала бы скрипт до echo с кодом возврата, а pipefail изменил бы смысл
-    # проверок вида `... | grep -q` (SIGPIPE даёт 141). Раньше команды шли через script_run
-    # в обычной интерактивной оболочке, так что возвращаем то же поведение.
-    my $wrapped = "set +e +o pipefail; { $cmd ; } 2>&1; echo ${marker}_RC=\$?";
-
-    my $raw = eval {
-        testapi::script_output($wrapped, timeout => $timeout, quiet => 1, proceed_on_failure => 1);
-    };
-    my $died = $@;
-    $raw //= '';
+    my $raw = testapi::script_output("cat $tmp", quiet => 1, proceed_on_failure => 1) // '';
 
     my ($rc) = $raw =~ /\Q$marker\E_RC=(-?\d+)/;
     (my $out = $raw) =~ s/\Q$marker\E_RC=-?\d+\s*\z//;
     $out =~ s/\s+\z//;
-    if ($died && !defined $rc) {
-        # Таймаут или потеря консоли: сохраняем причину в выводе, как и прежде получаем rc = -1
-        chomp $died;
-        $out .= ($out ne '' ? "\n" : '') . "(console error: $died)";
-    }
     $rc = defined $rc ? $rc : -1;    # -1: не смогли прочитать код возврата (например, ушла консоль)
     return ($rc, _mask($out));
 }
