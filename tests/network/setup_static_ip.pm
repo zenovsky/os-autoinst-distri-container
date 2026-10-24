@@ -16,6 +16,7 @@
 #   NET_CON_NAME    NetworkManager connection name, default ens4-static
 #   PEER_IP         if set, the peer is pinged after the setup
 use Mojo::Base 'basetest';
+use utf8;
 use testapi;
 use StepReport;
 
@@ -31,7 +32,7 @@ sub run {
     my $con = get_var('NET_CON_NAME', 'ens4-static');
     my $peer = get_var('PEER_IP');
 
-    step 'Network setup' => sub {
+    step 'Предусловие. Настройка сети' => sub {
         # Idempotent: a leftover connection from a previous run would make "con add" fail
         run_cmd "Removing a stale connection $con if present" => "nmcli con delete $con || true";
 
@@ -64,7 +65,7 @@ sub run {
     };
 
     if ($peer) {
-        step 'Ping peer' => sub {
+        step 'Предусловие. Сетевая связанность с соседней машиной (ping)' => sub {
             run_cmd "Checking connectivity to the peer $peer (4 ICMP echo requests)" => "ping -c 4 $peer";
         };
     }

@@ -18,6 +18,9 @@ package StepReport;
 # (first_boot.pm, setup_static_ip.pm и т.д.). Чтобы выгрузить все шаги job'а:
 #   write_step_report('suite', all => 1)
 #
+# Связь с тест-кейсом Qase: write_step_report('suite', qase_id => 'OC-13') добавляет в testsuite
+# свойство qase_case_id (для фильтров в Allure/Grafana). Имя suite и шагов при этом не меняется.
+#
 # Причина ошибки:
 #   - если задан fail => '...', берётся он;
 #   - иначе "Failed while: <последнее step_log шага>";
@@ -296,6 +299,11 @@ sub write_step_report {
       . qq{<testsuite name="%s" tests="%d" failures="%d" skipped="%d" time="%.3f" timestamp="%s">\n},
       xml_escape($suite), scalar @steps, $failures, $skipped, $total, $timestamp;
 
+    if (defined $opt{qase_id} && length $opt{qase_id}) {
+        $xml .= sprintf qq{  <properties>\n    <property name="qase_case_id" value="%s"/>\n  </properties>\n},
+          xml_escape($opt{qase_id});
+    }
+
     for my $s (@steps) {
         my $failed = $s->{status} eq 'failed';
         my $is_skipped = $s->{status} eq 'skipped';
@@ -337,7 +345,7 @@ sub write_step_report {
 
     my $dir = path('ulogs')->make_path;
     $dir->child("junit-$suite.xml")->spew(encode('UTF-8', $xml));
-    $dir->child("steps-$suite.json")->spew(encode_json({suite => $suite, steps => \@steps}));
+    $dir->child("steps-$suite.json")->spew(encode_json({suite => $suite, qase_id => $opt{qase_id}, steps => \@steps}));
     diag("[STEP] report written: ulogs/junit-$suite.xml, ulogs/steps-$suite.json");
     return;
 }

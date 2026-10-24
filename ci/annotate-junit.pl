@@ -28,10 +28,13 @@ my $openqa_esc = xml_escape($openqa_url);
 my $gitlab_esc = defined $gitlab_url && length $gitlab_url ? xml_escape($gitlab_url) : undef;
 
 # <properties> - для машинной обработки (другие тулы, будущий конвертер в Allure и т.п.).
-my $props = qq{  <properties>\n    <property name="openqa_job_url" value="$openqa_esc"/>\n};
-$props .= qq{    <property name="gitlab_job_url" value="$gitlab_esc"/>\n} if defined $gitlab_esc;
-$props .= qq{  </properties>\n};
-$xml =~ s{(<testsuite\b[^>]*>\n)}{$1$props}s or warn "annotate-junit.pl: <testsuite> tag not found in $file, properties not added\n";
+my $items = qq{    <property name="openqa_job_url" value="$openqa_esc"/>\n};
+$items .= qq{    <property name="gitlab_job_url" value="$gitlab_esc"/>\n} if defined $gitlab_esc;
+# StepReport уже мог записать <properties> (например qase_case_id) - дополняем его, а не создаём второй блок.
+unless ($xml =~ s{(<testsuite\b[^>]*>\n\s*<properties>\n)}{$1$items}s) {
+    my $props = qq{  <properties>\n$items  </properties>\n};
+    $xml =~ s{(<testsuite\b[^>]*>\n)}{$1$props}s or warn "annotate-junit.pl: <testsuite> tag not found in $file, properties not added\n";
+}
 
 # Ссылка в тексте failure - то, что реально видно глазами в панели деталей теста в GitLab.
 my $link_line = "\n\nopenQA job: $openqa_esc";
