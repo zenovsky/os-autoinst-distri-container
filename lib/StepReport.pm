@@ -108,13 +108,15 @@ sub _exec_capture {
     my ($cmd, %opt) = @_;
     my $timeout = $opt{timeout} // $CMD_TIMEOUT;
     my $marker = 'STEPCMD_' . int(rand(1_000_000)) . '_' . time;
-    my $tmp = "/tmp/$marker.log";
+    # Файл один на все команды: `>` перезаписывает его, поэтому мусор в /tmp не копится
+    # и отдельный rm -f не нужен. Маркер остаётся уникальным для каждой команды, так что
+    # устаревший вывод от предыдущей команды не будет принят за код возврата текущей.
+    my $tmp = '/tmp/stepreport_cmd.log';
 # Оборачиваем исходную команду как есть: она уже полноценная shell-строка (с пайпами и т.п.).
     my $wrapped = "{ $cmd ; } > $tmp 2>&1; echo ${marker}_RC=\$? >> $tmp";
     testapi::script_run($wrapped, timeout => $timeout);
 
     my $raw = testapi::script_output("cat $tmp", quiet => 1, proceed_on_failure => 1) // '';
-    testapi::script_run("rm -f $tmp", quiet => 1, timeout => 10);
 
     my ($rc) = $raw =~ /\Q$marker\E_RC=(-?\d+)/;
     (my $out = $raw) =~ s/\Q$marker\E_RC=-?\d+\s*\z//;
