@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Запускает сценарий openQA "openssh" (ssh_server + ssh_client), ждёт завершения обоих job'ов
-# и скачивает их JUnit-отчёты (junit-ssh_server.xml / junit-ssh_client.xml из ulogs/), чтобы
-# GitLab мог показать их во вкладке Tests.
+# и скачивает их отчёты:
+#   junit-*.xml  - для вкладки Tests в GitLab;
+#   steps-*.json - конвертируются в allure-results/ (ci/steps-to-allure.pl).
+# В конце (в том числе при падении или таймауте) собирает Allure-отчёт в allure-report/
+# и сохраняет историю прогонов в постоянный каталог на хосте раннера.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,9 +22,87 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${OPENQA_TIMEOUT:=1800}"        # сколько всего ждать завершения job'ов, секунд
 : "${OPENQA_POLL_INTERVAL:=15}"    # пауза между опросами статуса, секунд
 
-for bin in openqa-cli curl jq; do
+: "${ALLURE_RESULTS_DIR:=allure-results}"
+: "${ALLURE_REPORT_DIR:=allure-report}"
+: "${ALLURE_HISTORY_DIR:=/var/lib/allure-history}"   # постоянный каталог на хосте раннера
+: "${ALLURE_UPDATE_HISTORY:=1}"                      # 0 - не обновлять историю (например, для веток MR)
+
+for bin in openqa-cli curl jq perl; do
     command -v "$bin" >/dev/null || { echo "'$bin' not found in PATH on the runner host" >&2; exit 1; }
 done
+
+# ---------------------------------------------------------------------------
+# Allure: сборка отчёта. Вызывается из trap EXIT, чтобы отчёт появился и при падении тестов.
+# Любая ошибка здесь только предупреждает и не меняет код возврата скрипта.
+# ---------------------------------------------------------------------------
+build_allure_report() {
+    if ! command -v allure >/dev/null; then
+        echo "==> allure not found in PATH, skipping report generation" >&2
+        return 0
+    fi
+    if ! compgen -G "$ALLURE_RESULTS_DIR/*-result.json" >/dev/null; then
+        echo "==> No Allure results in $ALLURE_RESULTS_DIR, skipping report generation" >&2
+        return 0
+    fi
+
+    cat > "$ALLURE_RESULTS_DIR/environment.properties" <<EOF
+openQA.url=$OPENQA_URL
+openQA.build=$OPENQA_BUILD
+openQA.scenario=$OPENQA_TEST
+distri=$OPENQA_DISTRI
+version=$OPENQA_VERSION
+flavor=$OPENQA_FLAVOR
+arch=$OPENQA_ARCH
+EOF
+
+    echo "==> Building Allure report"
+    (
+        # Один процесс за раз работает с историей: параллельные пайплайны иначе затрут друг друга.
+        history_ok=0
+        if [ -d "$ALLURE_HISTORY_DIR" ] && [ -w "$ALLURE_HISTORY_DIR" ]; then
+            exec 9>"$ALLURE_HISTORY_DIR/.lock"
+            if flock -w 120 9; then
+                history_ok=1
+            else
+                echo "    could not take the history lock in 120s, building without history" >&2
+            fi
+        else
+            echo "    $ALLURE_HISTORY_DIR is missing or not writable, building without history" >&2
+        fi
+
+        if [ "$history_ok" = 1 ] && [ -d "$ALLURE_HISTORY_DIR/history" ]; then
+            rm -rf "$ALLURE_RESULTS_DIR/history"
+            cp -a "$ALLURE_HISTORY_DIR/history" "$ALLURE_RESULTS_DIR/history"
+        fi
+
+        allure generate "$ALLURE_RESULTS_DIR" -o "$ALLURE_REPORT_DIR" --clean
+
+        if [ "$history_ok" = 1 ] && [ "$ALLURE_UPDATE_HISTORY" = 1 ] && [ -d "$ALLURE_REPORT_DIR/history" ]; then
+            rm -rf "$ALLURE_HISTORY_DIR/history.new"
+            cp -a "$ALLURE_REPORT_DIR/history" "$ALLURE_HISTORY_DIR/history.new"
+            rm -rf "$ALLURE_HISTORY_DIR/history"
+            mv "$ALLURE_HISTORY_DIR/history.new" "$ALLURE_HISTORY_DIR/history"
+            echo "    history saved to $ALLURE_HISTORY_DIR/history"
+        fi
+    ) || echo "==> Allure report generation failed (the test result is not affected)" >&2
+    return 0
+}
+
+on_exit() {
+    local rc=$?
+    build_allure_report || true
+    exit "$rc"
+}
+trap on_exit EXIT
+
+# ---------------------------------------------------------------------------
+# Очистка: рабочая копия shell-раннера сохраняется между пайплайнами, и старые отчёты
+# иначе смешались бы с новыми (в том числе при проверке "junit-*.xml" ниже).
+# ---------------------------------------------------------------------------
+echo "==> Cleaning up results of previous runs"
+rm -rf "$ALLURE_RESULTS_DIR" "$ALLURE_REPORT_DIR"
+rm -f junit-*.xml steps-*.json
+mkdir -p "$ALLURE_RESULTS_DIR"
 
 echo "==> Scheduling openQA scenario '$OPENQA_TEST', BUILD=$OPENQA_BUILD"
 response=$(openqa-cli api -X POST isos \
@@ -70,7 +151,7 @@ while [ -n "$pending" ]; do
     [ -n "$pending" ] && sleep "$OPENQA_POLL_INTERVAL"
 done
 
-echo "==> Downloading JUnit reports"
+echo "==> Downloading JUnit and step reports"
 for id in $job_ids; do
     # Имя файла (junit-openssh-server.xml и т.п.) зависит от того, что передано в
     # write_step_report() внутри самого теста - не угадываем его, а спрашиваем у openQA,
@@ -90,6 +171,16 @@ for id in $job_ids; do
                     # Добавляем в отчёт ссылку на этот openQA job (видео/скриншоты/логи) и,
                     # если запущено из GitLab CI, на сам job GitLab.
                     perl "$SCRIPT_DIR/annotate-junit.pl" "$out" "$OPENQA_URL/tests/$id" "${CI_JOB_URL:-}"
+                    echo "    saved $out"
+                fi
+                ;;
+            steps-*.json)
+                url="$OPENQA_URL/tests/$id/file/$fname"
+                out="${fname%.json}-$id.json"
+                if curl -fsS "$url" -o "$out"; then
+                    # Конвертируем шаги в формат Allure; ошибка конвертации не должна ронять прогон.
+                    perl "$SCRIPT_DIR/steps-to-allure.pl" "$ALLURE_RESULTS_DIR" "$OPENQA_URL/tests/$id" "$id" "$out" \
+                        || echo "    $out: Allure conversion failed" >&2
                     echo "    saved $out"
                 fi
                 ;;
