@@ -1,3 +1,6 @@
 needles/
 .tidyall.d
 allure-results/
+allure-report/
+junit-*.xml
+steps-*.json

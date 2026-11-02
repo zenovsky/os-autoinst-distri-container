@@ -5,6 +5,14 @@ openqa:openssh:
   stage: test
   tags:
     - openqa-wsl
+  resource_group: openqa
+  timeout: 1h
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        ALLURE_UPDATE_HISTORY: "1"
+    - variables:
+        ALLURE_UPDATE_HISTORY: "0"
   variables:
     OPENQA_URL: "http://localhost"
     OPENQA_DISTRI: "os-autoinst-distri-container"
@@ -24,4 +32,7 @@ openqa:openssh:
       junit: "junit-*.xml"
     paths:
       - "junit-*.xml"
+      - "steps-*.json"
+      - "allure-results/"
+      - "allure-report/"
     expire_in: 30 days
