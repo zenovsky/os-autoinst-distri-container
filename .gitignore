@@ -4,3 +4,5 @@ allure-results/
 allure-report/
 junit-*.xml
 steps-*.json
+monitoring/.env
+metrics/

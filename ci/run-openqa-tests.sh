@@ -27,6 +27,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${ALLURE_HISTORY_DIR:=/var/lib/allure-history}"   # постоянный каталог на хосте раннера
 : "${ALLURE_UPDATE_HISTORY:=1}"                      # 0 - не обновлять историю (например, для веток MR)
 
+# Метрики для Grafana (InfluxDB 2.x). Если INFLUX_URL не задан - отправка пропускается.
+: "${INFLUX_URL:=}"                 # например http://localhost:8086
+: "${INFLUX_ORG:=openqa}"
+: "${INFLUX_BUCKET:=openqa}"
+: "${INFLUX_TOKEN:=}"               # write-токен (в GitLab - masked-переменная)
+: "${METRICS_DIR:=metrics}"
+
 for bin in openqa-cli curl jq perl; do
     command -v "$bin" >/dev/null || { echo "'$bin' not found in PATH on the runner host" >&2; exit 1; }
 done
@@ -88,9 +95,47 @@ EOF
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# Grafana: метрики job'ов и шагов -> InfluxDB. Вызывается из trap EXIT (как и Allure),
+# поэтому данные уходят и при упавших тестах. Ошибки только предупреждают.
+# ---------------------------------------------------------------------------
+push_metrics() {
+    if [ -z "$INFLUX_URL" ]; then
+        echo "==> INFLUX_URL is not set, skipping metrics upload"
+        return 0
+    fi
+    if [ -z "$INFLUX_TOKEN" ]; then
+        echo "==> INFLUX_TOKEN is not set, skipping metrics upload" >&2
+        return 0
+    fi
+    if ! compgen -G "$METRICS_DIR/job-*.json" >/dev/null; then
+        echo "==> No finished jobs to report, skipping metrics upload" >&2
+        return 0
+    fi
+
+    local lp="$METRICS_DIR/metrics.lp" jf id
+    local -a steps_files
+    : > "$lp"
+    for jf in "$METRICS_DIR"/job-*.json; do
+        id="${jf##*/job-}"; id="${id%.json}"
+        mapfile -t steps_files < <(compgen -G "steps-*-$id.json" || true)
+        perl "$SCRIPT_DIR/steps-to-influx.pl" "$lp" "$id" "$jf" "${steps_files[@]}" \
+            || echo "    job $id: metrics conversion failed" >&2
+    done
+    [ -s "$lp" ] || { echo "==> No metrics produced" >&2; return 0; }
+
+    echo "==> Sending $(wc -l < "$lp") metric point(s) to $INFLUX_URL (bucket $INFLUX_BUCKET)"
+    curl -fsS -m 30 -X POST "$INFLUX_URL/api/v2/write?org=$INFLUX_ORG&bucket=$INFLUX_BUCKET&precision=ns" \
+        -H "Authorization: Token $INFLUX_TOKEN" \
+        --data-binary @"$lp" \
+        || echo "==> Metrics upload failed (the test result is not affected)" >&2
+    return 0
+}
+
 on_exit() {
     local rc=$?
     build_allure_report || true
+    push_metrics || true
     exit "$rc"
 }
 trap on_exit EXIT
@@ -100,9 +145,9 @@ trap on_exit EXIT
 # иначе смешались бы с новыми (в том числе при проверке "junit-*.xml" ниже).
 # ---------------------------------------------------------------------------
 echo "==> Cleaning up results of previous runs"
-rm -rf "$ALLURE_RESULTS_DIR" "$ALLURE_REPORT_DIR"
+rm -rf "$ALLURE_RESULTS_DIR" "$ALLURE_REPORT_DIR" "$METRICS_DIR"
 rm -f junit-*.xml steps-*.json
-mkdir -p "$ALLURE_RESULTS_DIR"
+mkdir -p "$ALLURE_RESULTS_DIR" "$METRICS_DIR"
 
 echo "==> Scheduling openQA scenario '$OPENQA_TEST', BUILD=$OPENQA_BUILD"
 response=$(openqa-cli api -X POST isos \
@@ -142,6 +187,7 @@ while [ -n "$pending" ]; do
         if [ "$state" = "done" ]; then
             result=$(jq -r '.job.result // "unknown"' <<<"$info")
             job_result[$id]="$result"
+            printf '%s' "$info" > "$METRICS_DIR/job-$id.json"
             echo "==> Job $id finished: $result ($OPENQA_URL/tests/$id)"
         else
             still_pending="$still_pending $id"

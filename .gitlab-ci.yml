@@ -5,9 +5,12 @@ openqa:openssh:
   stage: test
   tags:
     - openqa-wsl
+  # Один прогон за раз: у машин сценария фиксированные IP (172.16.2.10/11),
+  # а рабочая копия раннера общая. Параллельные пайплайны мешали бы друг другу.
   resource_group: openqa
   timeout: 1h
   rules:
+    # Историю Allure обновляет только основная ветка, остальные прогоны её не трогают.
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       variables:
         ALLURE_UPDATE_HISTORY: "1"
@@ -23,6 +26,11 @@ openqa:openssh:
     OPENQA_CASEDIR: "/var/lib/openqa/tests/os-autoinst-distri-container"
     OPENQA_TEST: "openssh-client"
     OPENQA_DNS_IP: "10.255.255.254"
+    # Метрики для Grafana (стек в monitoring/). INFLUX_TOKEN задайте в Settings -> CI/CD -> Variables
+    # (masked); без токена отправка метрик просто пропускается.
+    INFLUX_URL: "http://localhost:8086"
+    INFLUX_ORG: "openqa"
+    INFLUX_BUCKET: "openqa"
   script:
     - chmod +x ci/run-openqa-tests.sh
     - ./ci/run-openqa-tests.sh
@@ -35,4 +43,5 @@ openqa:openssh:
       - "steps-*.json"
       - "allure-results/"
       - "allure-report/"
+      - "metrics/"
     expire_in: 30 days
